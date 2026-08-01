@@ -44,7 +44,7 @@ The camera controls are similar to most 3D editors.
 
 Make sure to hold down RMB when moving.
 
-## examples
+## Examples
 
 I have compiled some splats in this 
 [google drive folder](https://drive.google.com/drive/folders/1D8GRehKaSA6uY1TZnMk8U7GyuP6YOJhg?usp=sharing).
@@ -79,14 +79,14 @@ This is only if you want to compile and run the code on your own.
 If you only wanted to try the app, you can download it from release.
 The executable is inside the attached zip.
 
-### Hardware requirements (for building)
+### Hardware Requirements (for building)
 
 1. GPU with Vulkan support (required)
 2. 16GB RAM at least (required)
 3. 1GB Storage at least (required)
 4. Quad-core processor or better (recommended)
 
-### Software requirements (for building)
+### Software Requirements (for building)
 
 1) Windows 10 or later.
 2) Visual Studio Code (not to be confused with Visual Studio)
