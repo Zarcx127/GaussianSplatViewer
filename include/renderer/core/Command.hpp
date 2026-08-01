@@ -9,11 +9,22 @@
 #include <vulkan/vulkan.hpp>
 
 vk::CommandPool make_command_pool(
-    vk::Device logicalDevice, 
+    vk::Device device, 
     uint32_t graphicsQueueFamilyIndex, 
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 );
 
-vk::CommandBuffer allocate_command_buffer(vk::Device logicalDevice, vk::CommandPool commandPool);
+vk::CommandBuffer make_command_buffer(
+    vk::Device device, 
+    vk::CommandPool commandPool,
+    std::deque<std::function<void(vk::Device)>>& deletionQueue
+);
+
+void immediate_submit(
+    vk::Device device,
+    vk::CommandPool commandPool,
+    vk::Queue queue,
+    const std::function<void(vk::CommandBuffer)>& function
+);
 
 #endif

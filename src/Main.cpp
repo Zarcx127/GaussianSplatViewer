@@ -21,8 +21,6 @@ int main()
         return 1;
 
     Engine engine(window.get_window());
-    if(!engine.init())
-        return 1;
 
     App app(window.get_window(), &engine);
     app.main_loop();

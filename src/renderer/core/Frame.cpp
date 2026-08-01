@@ -10,16 +10,17 @@
 #include "renderer/core/Image.hpp"
 #include "renderer/core/Synchronization.hpp"
 
-#include "renderer/resources/Descriptors.hpp"
+#include "renderer/resources/descriptors/Descriptors.hpp"
 
 Frame::Frame(
     Swapchain* swapchain, 
     vk::Device device, 
     std::vector<vk::ShaderEXT>* shaders, 
     vk::CommandBuffer& commandBuffer,
-    vk::DescriptorSetLayout* descriptorSetLayout,
-    vk::DescriptorPool* descriptorPool,
-    vk::PipelineLayout* pipelineLayout,
+    const vk::DescriptorSetLayout* descriptorSetLayout,
+    const vk::DescriptorPool* descriptorPool,
+    const vk::PipelineLayout* pipelineLayout,
+    const AllocatedImage* depthImage,
     Mesh* mesh,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
@@ -30,12 +31,13 @@ Frame::Frame(
     m_descriptorSetLayout = descriptorSetLayout;
     m_descriptorPool = descriptorPool;
     m_pipelineLayout = pipelineLayout;
+    m_depthImage = depthImage;
     
     m_descriptorSet = allocate_descriptor_set(device, *descriptorPool, *descriptorSetLayout);
     
     m_mesh = mesh;
 
-    imageAquiredSemaphore = make_semaphore(device, deletionQueue);
+    imageacquiredSemaphore = make_semaphore(device, deletionQueue);
 
     renderFinishedSemaphores.resize(swapchain->imageViews.size());
     for(vk::Semaphore& renderFinishedSemaphore : renderFinishedSemaphores)
@@ -49,6 +51,7 @@ void Frame::record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp)
     (void) commandBuffer.reset();
 
     build_color_attachment(imageIndex);
+    build_depth_attachment();
     build_rendering_info();
 
     vk::CommandBufferBeginInfo beginInfo = {};
@@ -113,6 +116,8 @@ void Frame::build_rendering_info()
     m_renderingInfo.layerCount = 1;
     m_renderingInfo.colorAttachmentCount = 1;
     m_renderingInfo.pColorAttachments = &m_colorAttachment;
+    m_renderingInfo.pDepthAttachment = &m_depthAttachment;
+    m_renderingInfo.pStencilAttachment = nullptr;
 }
 
 void Frame::build_color_attachment(uint32_t imageIndex)
@@ -122,6 +127,18 @@ void Frame::build_color_attachment(uint32_t imageIndex)
     m_colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     m_colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
     m_colorAttachment.clearValue = vk::ClearValue({0.0f, 0.0f, 0.0f, 1.0f});
+}
+
+void Frame::build_depth_attachment()
+{
+    vk::ClearValue clearValue = {};
+    clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+    m_depthAttachment.imageView = m_depthImage->imageView;
+    m_depthAttachment.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
+    m_depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+    m_depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+    m_depthAttachment.clearValue = clearValue;
 }
 
 void Frame::initialize_render_state()
@@ -151,7 +168,7 @@ void Frame::initialize_render_state()
     commandBuffer.setViewportWithCount(viewport);
     commandBuffer.setScissorWithCount(scissor);
 
-    commandBuffer.setColorBlendEnableEXT(0, VK_FALSE);
+    commandBuffer.setColorBlendEnableEXT(0, vk::False);
     commandBuffer.setColorBlendEquationEXT(0, equation);
 	commandBuffer.setColorWriteMaskEXT(0, colorWriteMask);
 	
@@ -161,11 +178,13 @@ void Frame::initialize_render_state()
 	commandBuffer.setCullMode(vk::CullModeFlagBits::eNone);
 	commandBuffer.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
     
-    commandBuffer.setRasterizerDiscardEnable(VK_FALSE);
-    commandBuffer.setAlphaToCoverageEnableEXT(VK_FALSE);
-	commandBuffer.setDepthTestEnable(VK_FALSE);
-	commandBuffer.setDepthWriteEnable(VK_FALSE);
-	commandBuffer.setDepthBiasEnable(VK_FALSE);
-	commandBuffer.setStencilTestEnable(VK_FALSE);
-	commandBuffer.setPrimitiveRestartEnable(VK_FALSE);
+    commandBuffer.setRasterizerDiscardEnable(vk::False);
+    commandBuffer.setAlphaToCoverageEnableEXT(vk::False);
+	commandBuffer.setDepthTestEnable(vk::True);
+	commandBuffer.setDepthWriteEnable(vk::True);
+	commandBuffer.setDepthBiasEnable(vk::False);
+	commandBuffer.setStencilTestEnable(vk::False);
+	commandBuffer.setPrimitiveRestartEnable(vk::False);
+
+    commandBuffer.setDepthCompareOp(vk::CompareOp::eLess);
 }

@@ -13,22 +13,22 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "AppState.hpp"
+
 #include "logging/Logger.hpp"
 
 #include "renderer/core/Frame.hpp"
 #include "renderer/core/Swapchain.hpp"
 
+#include "renderer/resources/images/AllocatedImage.hpp"
+#include "renderer/resources/shaders/ShaderInterface.hpp"
+
 class Engine
 {
 public:
-    bool rebuildSwapchain { false };
-
     Engine(GLFWwindow* window);
-    
-    bool init();
-    
-    void draw();
-    void update_timing();
+
+    void render_loop(AppState& state);
     
     ~Engine();
     
@@ -39,7 +39,9 @@ private:
     std::deque<std::function<void(vk::Instance)>> m_instanceDeletionQueue;
     std::deque<std::function<void(vk::Device)>> m_deviceDeletionQueue;
     std::deque<std::function<void(vk::Device)>> m_renderDeletionQueue;
+
     std::deque<std::function<void(VmaAllocator)>> m_vmaDeletionQueue;
+    std::deque<std::function<void(VmaAllocator)>> m_renderVmaDeletionQueue;
     
     vk::Instance m_instance;
 
@@ -56,17 +58,19 @@ private:
     vk::SurfaceKHR m_surface;
 
     std::vector<vk::ShaderEXT> m_shaders;
-    vk::ShaderEXT m_shader;
+    vk::ShaderEXT m_computeShader;
 
     Mesh m_mesh;
 
-    vk::DescriptorSetLayout m_descriptorSetLayout;
+    ShaderInterface m_graphicsInterface;
+
     vk::DescriptorPool m_descriptorPool;
     vk::PipelineLayout m_pipelineLayout;
 
     vk::CommandPool m_commandPool;
 
     Swapchain m_swapchain;
+    AllocatedImage m_depthImage;
     std::vector<Frame> m_frames;
 
     std::vector<vk::Fence> m_imagesInFlight;
@@ -78,10 +82,26 @@ private:
     uint32_t m_currFrame { 0 };
     uint32_t m_numFrames { 0 };
 
-    void destroy_render_resources();
-    bool init_render_resources();
+    bool m_rebuildSwapchain { false };
+    bool m_initialized { false };
 
-    void clean_up();
+    enum class DrawResult
+    {
+        Success,
+        Skipped,
+        NeedsSwapchainRebuild,
+        FatalError
+    };
+
+    bool init(uint32_t width, uint32_t height);
+
+    DrawResult draw(uint32_t width, uint32_t height);
+    void update_timing(AppState& state);
+
+    bool init_render_resources(uint32_t width, uint32_t height);
+    void destroy_render_resources();
+
+    void shutdown();
 };
 
 #endif

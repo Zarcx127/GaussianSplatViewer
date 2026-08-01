@@ -2,8 +2,12 @@
 
 #include "logging/Logger.hpp"
 
-vk::ImageView create_image_view(vk::Device logicalDevice, vk::Image image, vk::Format format)
-{
+vk::ImageView create_image_view(
+    vk::Device device, 
+    vk::Image image, 
+    vk::Format format, 
+    vk::ImageAspectFlags aspectMask
+) {
     Logger* logger = Logger::get_logger();
 
     vk::ImageViewCreateInfo createInfo = {};
@@ -17,13 +21,13 @@ vk::ImageView create_image_view(vk::Device logicalDevice, vk::Image image, vk::F
     createInfo.components.b = vk::ComponentSwizzle::eIdentity;
     createInfo.components.a = vk::ComponentSwizzle::eIdentity;
     
-    createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+    createInfo.subresourceRange.aspectMask = aspectMask;
     createInfo.subresourceRange.baseMipLevel = 0;
     createInfo.subresourceRange.levelCount = 1;
     createInfo.subresourceRange.baseArrayLayer = 0;
     createInfo.subresourceRange.layerCount = 1;
 
-    vk::ResultValue<vk::ImageView> attemptImageView = logicalDevice.createImageView(createInfo);
+    vk::ResultValue<vk::ImageView> attemptImageView = device.createImageView(createInfo);
     if(attemptImageView.result != vk::Result::eSuccess)
     {
         logger->print("Failed to create image view");
@@ -41,11 +45,12 @@ void transition_image_layout(
     vk::AccessFlags srcAccessMask, 
     vk::AccessFlags dstAccessMask,
     vk::PipelineStageFlags srcStage, 
-    vk::PipelineStageFlags dstStage
+    vk::PipelineStageFlags dstStage,
+    vk::ImageAspectFlags aspectMask
 ) {
     vk::ImageSubresourceRange access = {};
     
-    access.aspectMask = vk::ImageAspectFlagBits::eColor;
+    access.aspectMask = aspectMask;
     access.baseMipLevel = 0;
     access.levelCount = 1;
     access.baseArrayLayer = 0;

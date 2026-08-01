@@ -76,12 +76,14 @@ vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
     }
 
     vk::DebugUtilsMessengerEXT messenger = createResult.value;
-    deletionQueue.push_back([this, messenger] (vk::Instance instance)->void{
-        instance.destroyDebugUtilsMessengerEXT(messenger);
+    deletionQueue.push_back(
+        [this, messenger] (vk::Instance instance)->void {
+            instance.destroyDebugUtilsMessengerEXT(messenger);
  
-        if(m_enabled)
-            cout << "Deleted debug messenger" << endl;
-    });
+           if(m_enabled)
+                cout << "Deleted debug messenger" << endl;
+        }
+    );
 
     return messenger;
 }
@@ -265,7 +267,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 ) {
     std::cerr << "validation layer: " << pCallbackData->pMessage << endl;
 
-    return VK_FALSE;
+    return vk::False;
 }
 
 
@@ -432,8 +434,19 @@ void Logger::log(const std::vector<vk::SurfaceFormatKHR>& formats, const char* p
 void Logger::log(const std::vector<vk::PresentModeKHR>& modes, const char* prefix) {}
 void Logger::log(const VmaAllocationInfo& info, const char* prefix) {}
 
-vector<const char*> Logger::parse_transform_bits(vk::SurfaceTransformFlagsKHR bits) {}
-vector<const char*> Logger::parse_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits) {}
-vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits) {}
+vector<const char*> Logger::parse_transform_bits(vk::SurfaceTransformFlagsKHR bits) 
+{
+    return vector<const char*>{};
+}
+
+vector<const char*> Logger::parse_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits) 
+{
+    return vector<const char*>{};
+}
+
+vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits) 
+{
+    return vector<const char*>{};
+}
 
 #endif

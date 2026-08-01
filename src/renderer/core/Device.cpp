@@ -100,7 +100,7 @@ uint32_t find_queue_family_index(
 
         bool canPresent = true;
         if(surface)
-            if(physicalDevice.getSurfaceSupportKHR(i, surface).value != VK_TRUE)
+            if(physicalDevice.getSurfaceSupportKHR(i, surface).value != vk::True)
                 canPresent = false;
 
         bool supported = false;
@@ -135,10 +135,10 @@ vk::Device create_logical_device(
     shaderFeatures.sType = vk::StructureType::ePhysicalDeviceShaderObjectFeaturesEXT;
     vulkan13Features.sType = vk::StructureType::ePhysicalDeviceVulkan13Features;
     
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-    shaderFeatures.shaderObject = VK_TRUE;
-    vulkan13Features.dynamicRendering = VK_TRUE;
-    vulkan13Features.synchronization2 = VK_TRUE;
+    deviceFeatures.samplerAnisotropy = vk::True;
+    shaderFeatures.shaderObject = vk::True;
+    vulkan13Features.dynamicRendering = vk::True;
+    vulkan13Features.synchronization2 = vk::True;
     
     vk::PhysicalDeviceFeatures2 featureChain = {};
     featureChain.sType  = vk::StructureType::ePhysicalDeviceFeatures2;
@@ -181,12 +181,14 @@ vk::Device create_logical_device(
     }
     
     logger->print("GPU has been successfully abstracted");
-    deletionQueue.push_back([logger] (vk::Device device)->void{
-        (void) device.waitIdle();
-        device.destroy();
+    deletionQueue.push_back(
+        [logger] (vk::Device device)->void {
+            (void) device.waitIdle();
+            device.destroy();
 
-        logger->print("Deleted logical device");
-    });
+            logger->print("Deleted logical device");
+        }
+    );
 
     return logicalDevice.value;
 }

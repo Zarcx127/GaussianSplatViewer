@@ -70,10 +70,12 @@ vk::Instance make_instance(
 
     vk::Instance instance = instanceAttempt.value;
 
-    deletionQueue.push_back([logger] (vk::Instance instance)->void{
-        instance.destroy();
-        logger->print("Deleted instance");
-    });
+    deletionQueue.push_back(
+        [logger] (vk::Instance instance)->void {
+            instance.destroy();
+            logger->print("Deleted instance");
+        }
+    );
 
     return instance;
 }

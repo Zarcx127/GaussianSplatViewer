@@ -1,4 +1,4 @@
-#include "renderer/resources/Buffer.hpp"
+#include "renderer/resources/buffers/Buffer.hpp"
 
 void copy_buffer(
     vk::Buffer srcBuffer,
@@ -41,7 +41,7 @@ void copy_buffer(
     submitInfo.pCommandBuffers = &commandBuffer;
     
     (void) queue.submit(1, &submitInfo, fence);
-    (void) device.waitForFences(1, &fence, VK_TRUE, UINT64_MAX);
+    (void) device.waitForFences(1, &fence, vk::True, UINT64_MAX);
 
     device.destroyFence(fence);
     device.freeCommandBuffers(commandPool, commandBuffer);

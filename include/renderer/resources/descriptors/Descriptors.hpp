@@ -43,8 +43,8 @@ private:
 
 vk::DescriptorSet allocate_descriptor_set(
     vk::Device device, 
-    vk::DescriptorPool& descriptorPool, 
-    vk::DescriptorSetLayout& descriptorSetLayout
+    const vk::DescriptorPool& descriptorPool, 
+    const vk::DescriptorSetLayout& descriptorSetLayout
 );
 
 #endif

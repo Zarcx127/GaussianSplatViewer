@@ -1,4 +1,4 @@
-#include "renderer/resources/Descriptors.hpp"
+#include "renderer/resources/descriptors/Descriptors.hpp"
 
 #include "logging/Logger.hpp"
 
@@ -31,10 +31,12 @@ vk::DescriptorSetLayout DescriptorSetLayoutBuilder::build(
     reset();
 
     vk::DescriptorSetLayout handle = layoutAttempt.value;
-    deletionQueue.push_back([logger, handle] (vk::Device device)->void{
-        device.destroyDescriptorSetLayout(handle);
-        logger->print("Deleted descriptor set layout");
-    });
+    deletionQueue.push_back(
+        [logger, handle] (vk::Device device)->void {
+            device.destroyDescriptorSetLayout(handle);
+            logger->print("Deleted descriptor set layout");
+        }
+    );
 
     return layoutAttempt.value;
 }
@@ -85,10 +87,12 @@ vk::DescriptorPool DescriptorPoolBuilder::build(uint32_t descriptorSetCount, std
     logger->print("Created descriptor pool");
 
     vk::DescriptorPool descriptorPool = descriptorPoolAttempt.value;
-    deletionQueue.push_back([logger, descriptorPool] (vk::Device device)->void{
-        device.destroy(descriptorPool);
-        logger->print("Deleted descriptor pool");
-    });
+    deletionQueue.push_back(
+        [logger, descriptorPool] (vk::Device device)->void {
+            device.destroy(descriptorPool);
+            logger->print("Deleted descriptor pool");
+        }
+    );
 
     return descriptorPool;
 }
@@ -105,8 +109,8 @@ void DescriptorPoolBuilder::add_entry(vk::DescriptorType bindingType)
 
 vk::DescriptorSet allocate_descriptor_set(
     vk::Device device, 
-    vk::DescriptorPool& descriptorPool, 
-    vk::DescriptorSetLayout& descriptorSetLayout
+    const vk::DescriptorPool& descriptorPool, 
+    const vk::DescriptorSetLayout& descriptorSetLayout
 ) {
     Logger* logger = Logger::get_logger();
 

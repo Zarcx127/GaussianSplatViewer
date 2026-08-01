@@ -1,6 +1,4 @@
-#include "renderer/resources/Shader.hpp"
-
-#include <glm/glm.hpp>
+#include "renderer/resources/shaders/Shader.hpp"
 
 #include <cstdint>
 #include <array>
@@ -9,76 +7,20 @@
 
 #include "backend/Utils.hpp"
 
-PipelineLayoutBuilder::PipelineLayoutBuilder(vk::Device& device)
-{
-    m_device = &device;
-}
-
-vk::PipelineLayout PipelineLayoutBuilder::build(
-    std::deque<std::function<void(vk::Device)>>& deletionQueue
-) {
-    Logger* logger = Logger::get_logger();
-
-    vk::PipelineLayoutCreateInfo layoutInfo = {};
-
-    layoutInfo.flags = vk::PipelineLayoutCreateFlagBits();
-    layoutInfo.setLayoutCount = m_descriptorSetLayouts.size();
-    layoutInfo.pSetLayouts = m_descriptorSetLayouts.data();
-    layoutInfo.pushConstantRangeCount = m_pushConstantRanges.size();
-    layoutInfo.pPushConstantRanges = m_pushConstantRanges.data();
-
-    vk::ResultValue<vk::PipelineLayout> layoutAttempt = 
-        m_device->createPipelineLayout(layoutInfo);
-
-    if(layoutAttempt.result != vk::Result::eSuccess)
-    {
-        logger->print("Failed to create pipeline layout");
-        return vk::PipelineLayout();
-    }
-
-    logger->print("Created pipeline layout");
-    reset();
-
-    vk::PipelineLayout handle = layoutAttempt.value;
-    deletionQueue.push_back([logger, handle] (vk::Device device)->void{
-        device.destroyPipelineLayout(handle);
-        logger->print("Deleted pipeline layout");
-    });
-
-    return layoutAttempt.value;
-}
-
-void PipelineLayoutBuilder::add(vk::DescriptorSetLayout descriptorSetLayout) 
-{
-    m_descriptorSetLayouts.push_back(descriptorSetLayout);
-}
-
-void PipelineLayoutBuilder::add_push_constant_range(
-    vk::ShaderStageFlags stageFlags, 
-    uint32_t size
-) {
-    vk::PushConstantRange range = {};
-
-    range.stageFlags = stageFlags;
-    range.offset = 0;
-    range.size = size;
-
-    m_pushConstantRanges.push_back(range);
-}
-
-void PipelineLayoutBuilder::reset()
-{
-    m_descriptorSetLayouts.clear();
-    m_pushConstantRanges.clear();
-}
-
 std::vector<vk::ShaderEXT> make_shader_object(
-    vk::Device logicalDevice, 
+    vk::Device device, 
     const char* vertexFileName, 
     const char* fragmentFileName, 
+    const ShaderInterface& shaderInterface,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     Logger* logger = Logger::get_logger();
+
+    const std::vector<vk::DescriptorSetLayout>& setLayouts =
+        shaderInterface.get_descriptor_set_layouts();
+    
+    const std::vector<vk::PushConstantRange>& pushRanges =
+        shaderInterface.get_push_constant_ranges();
 
     vk::ShaderCreateFlagsEXT flags = vk::ShaderCreateFlagBitsEXT::eLinkStage;
     vk::ShaderStageFlags nextStage = vk::ShaderStageFlagBits::eFragment;
@@ -86,14 +28,6 @@ std::vector<vk::ShaderEXT> make_shader_object(
     vk::ShaderCodeTypeEXT codeType = vk::ShaderCodeTypeEXT::eSpirv;
     const char* pName = "main";
 
-    std::array<vk::PushConstantRange, 1> pushRanges = {{
-        vk::PushConstantRange{
-            vk::ShaderStageFlagBits::eVertex,
-            0,
-            sizeof(glm::mat4)
-        }
-    }};
-    
     std::vector<uint32_t> vertexSrc = utils::read_file(vertexFileName);
     vk::ShaderCreateInfoEXT vertexInfo = vk::ShaderCreateInfoEXT(
         flags,
@@ -105,6 +39,8 @@ std::vector<vk::ShaderEXT> make_shader_object(
         pName
     );
 
+    vertexInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    vertexInfo.pSetLayouts = setLayouts.data();
     vertexInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
     vertexInfo.pPushConstantRanges = pushRanges.data();
 
@@ -121,6 +57,8 @@ std::vector<vk::ShaderEXT> make_shader_object(
         pName
     );
 
+    fragmentInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    fragmentInfo.pSetLayouts = setLayouts.data();
     fragmentInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
     fragmentInfo.pPushConstantRanges = pushRanges.data();
 
@@ -129,7 +67,7 @@ std::vector<vk::ShaderEXT> make_shader_object(
     };
 
     vk::ResultValue<std::vector<vk::ShaderEXT>> createShadersAttempt =
-        logicalDevice.createShadersEXT(shaderInfo);
+        device.createShadersEXT(shaderInfo);
 
     if(createShadersAttempt.result != vk::Result::eSuccess)
     {
@@ -143,27 +81,37 @@ std::vector<vk::ShaderEXT> make_shader_object(
     std::vector<vk::ShaderEXT> shaders = createShadersAttempt.value;
     
     vk::ShaderEXT vertexShader = shaders[0];
-    deletionQueue.push_back([logger, vertexShader] (vk::Device device)->void{
-        device.destroyShaderEXT(vertexShader);
-        logger->print("Deleted vertex shader");
-    });
+    deletionQueue.push_back(
+        [logger, vertexShader] (vk::Device device)->void {
+            device.destroyShaderEXT(vertexShader);
+            logger->print("Deleted vertex shader");
+        }
+    );
     
     vk::ShaderEXT fragmentShader = shaders[1];
-    deletionQueue.push_back([logger, fragmentShader] (vk::Device device)->void{
-        device.destroyShaderEXT(fragmentShader);
-        logger->print("Deleted fragment shader");
-    });
+    deletionQueue.push_back(
+        [logger, fragmentShader] (vk::Device device)->void {
+            device.destroyShaderEXT(fragmentShader);
+            logger->print("Deleted fragment shader");
+        }
+    );
 
     return shaders;
 }
 
 vk::ShaderEXT make_compute_shader(
-    vk::Device logicalDevice, 
-    const char* computeFileName,
-    vk::DescriptorSetLayout* pLayouts,
+    vk::Device device, 
+    const char* computeFileName, 
+    const ShaderInterface& shaderInterface,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     Logger* logger = Logger::get_logger();
+
+    const std::vector<vk::DescriptorSetLayout>& setLayouts =
+        shaderInterface.get_descriptor_set_layouts();
+    
+    const std::vector<vk::PushConstantRange>& pushRanges =
+        shaderInterface.get_push_constant_ranges();
 
     vk::ShaderCodeTypeEXT codeType = vk::ShaderCodeTypeEXT::eSpirv;
     const char* pName = "main";
@@ -176,12 +124,14 @@ vk::ShaderEXT make_compute_shader(
     shaderInfo.codeSize = srcCode.size() * sizeof(uint32_t);
     shaderInfo.pCode = srcCode.data();
     shaderInfo.pName = pName;
-    shaderInfo.setLayoutCount = 1;
-    shaderInfo.pSetLayouts = pLayouts;
+    shaderInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    shaderInfo.pSetLayouts = setLayouts.data();
+    shaderInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
+    shaderInfo.pPushConstantRanges = pushRanges.data();
 
     vk::ResultValue<vk::ShaderEXT> createShadersAttempt = 
-        logicalDevice.createShaderEXT(shaderInfo);
-
+        device.createShaderEXT(shaderInfo);
+    
     if(createShadersAttempt.result != vk::Result::eSuccess)
     {
         logger->print("Failed to create compute shader object");
@@ -190,10 +140,12 @@ vk::ShaderEXT make_compute_shader(
 
     vk::ShaderEXT computeShader = createShadersAttempt.value;
     
-    deletionQueue.push_back([logger, computeShader] (vk::Device device)->void{
-        device.destroyShaderEXT(computeShader);
-        logger->print("Deleted compute shader");
-    });
+    deletionQueue.push_back(
+        [logger, computeShader] (vk::Device device)->void {
+            device.destroyShaderEXT(computeShader);
+            logger->print("Deleted compute shader");
+        }
+    );
 
     return computeShader;
 }

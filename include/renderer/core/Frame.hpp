@@ -15,6 +15,8 @@
 
 #include "renderer/core/Swapchain.hpp"
 
+#include "renderer/resources/images/AllocatedImage.hpp"
+
 class Frame
 {
 public:
@@ -23,7 +25,7 @@ public:
 
     vk::CommandBuffer commandBuffer;
 
-    vk::Semaphore imageAquiredSemaphore;
+    vk::Semaphore imageacquiredSemaphore;
     std::vector<vk::Semaphore> renderFinishedSemaphores;
     vk::Fence renderFinishedFence;
     
@@ -32,10 +34,11 @@ public:
         vk::Device device, 
         std::vector<vk::ShaderEXT>* shaders, 
         vk::CommandBuffer& commandBuffer,
-        vk::DescriptorSetLayout* descriptorSetLayout,
-        vk::DescriptorPool* descriptorPool,
-        vk::PipelineLayout* pipelineLayout,
-        Mesh* mesh,
+        const vk::DescriptorSetLayout* descriptorSetLayout,
+        const vk::DescriptorPool* descriptorPool,
+        const vk::PipelineLayout* pipelineLayout,
+        const AllocatedImage* depthImage,
+        Mesh* mesh, 
         std::deque<std::function<void(vk::Device)>>& deletionQueue
     );
 
@@ -44,17 +47,23 @@ public:
 private:
     vk::RenderingInfoKHR m_renderingInfo {};
     vk::RenderingAttachmentInfoKHR m_colorAttachment {};
+    vk::RenderingAttachmentInfoKHR m_depthAttachment {};
     
-    vk::DescriptorSetLayout* m_descriptorSetLayout { nullptr };
-    vk::DescriptorPool* m_descriptorPool { nullptr };
-    vk::PipelineLayout* m_pipelineLayout { nullptr };
+    const vk::DescriptorSetLayout* m_descriptorSetLayout { nullptr };
+    const vk::DescriptorPool* m_descriptorPool { nullptr };
+    const vk::PipelineLayout* m_pipelineLayout { nullptr };
+
     vk::DescriptorSet m_descriptorSet;
 
     Mesh* m_mesh;
+
+    const AllocatedImage* m_depthImage { nullptr };
     
     void build_rendering_info();
 
     void build_color_attachment(uint32_t imageIndex);
+
+    void build_depth_attachment();
 
     void initialize_render_state();
 };

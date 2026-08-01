@@ -14,6 +14,15 @@ void Swapchain::build(
 ) {
     Logger* logger = Logger::get_logger();
 
+    chain = vk::SwapchainKHR{};
+    
+    images.clear();
+    imageViews.clear();
+
+    imageCount = 0;
+    format = vk::SurfaceFormatKHR{};
+    extent = vk::Extent2D{};
+
     SurfaceDetails support = query_surface_support(physicalDevice, surface);
 
     format = choose_surface_format(support.formats);
@@ -38,17 +47,29 @@ void Swapchain::build(
 
     createInfo.preTransform = support.capabilities.currentTransform;
     createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
+    createInfo.clipped = vk::True;
     createInfo.oldSwapchain = vk::SwapchainKHR(nullptr);
 
-    vk::ResultValue<vk::SwapchainKHR> swapChainAttempt = logicalDevice.createSwapchainKHR(createInfo);
-    if(swapChainAttempt.result != vk::Result::eSuccess)
+    vk::SwapchainKHR newSwapchain = {};
+    vk::Result swapChainAttempt = logicalDevice.createSwapchainKHR(
+        &createInfo, nullptr, &newSwapchain
+    );
+    
+    if(swapChainAttempt != vk::Result::eSuccess)
     {
         logger->print("Failed to create swapchain");
         return;
     }
 
-    chain = swapChainAttempt.value;
+    chain = newSwapchain;
+
+    vk::SwapchainKHR chainHandle = chain;
+    deletionQueue.push_back(
+        [logger, chainHandle] (vk::Device device)->void {
+            device.destroySwapchainKHR(chainHandle);
+            logger->print("Deleted swapchain");
+        }
+    );
     
     vk::ResultValue<std::vector<vk::Image>> imagesAttempt = 
         logicalDevice.getSwapchainImagesKHR(chain);
@@ -67,17 +88,13 @@ void Swapchain::build(
         imageViews[i] = create_image_view(logicalDevice, images[i], format.format);
 
         vk::ImageView imageViewHandle = imageViews[i];
-        deletionQueue.push_back([imageViewHandle, logger] (vk::Device device)->void{
-            device.destroyImageView(imageViewHandle);
-            logger->print("Deleted image view");
-        });
+        deletionQueue.push_back(
+            [logger, imageViewHandle] (vk::Device device)->void {
+                device.destroyImageView(imageViewHandle);
+                logger->print("Deleted image view");
+            }
+        );
     }
-
-    vk::SwapchainKHR chainHandle = chain;
-    deletionQueue.push_back([chainHandle, logger] (vk::Device device)->void{
-        device.destroySwapchainKHR(chainHandle);
-        logger->print("Deleted swapchain");
-    });
 }
 
 SurfaceDetails Swapchain::query_surface_support(
