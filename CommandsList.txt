@@ -1,4 +1,4 @@
-/// Make Commands ///
+//
 
 reload mode=[mode]
     run .exe after rebuilding objs and shaders
@@ -34,5 +34,3 @@ clean_shaders
 
 clean_obj
     deletes all obj files
-
-///

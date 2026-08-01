@@ -97,11 +97,11 @@ vk::DescriptorPool DescriptorPoolBuilder::build(uint32_t descriptorSetCount, std
     return descriptorPool;
 }
 
-void DescriptorPoolBuilder::add_entry(vk::DescriptorType bindingType)
+void DescriptorPoolBuilder::add_entry(vk::DescriptorType bindingType, uint32_t descriptorCount)
 {
     vk::DescriptorPoolSize poolSize = {};
 
-    poolSize.descriptorCount = 3;
+    poolSize.descriptorCount = descriptorCount;
     poolSize.type = bindingType;
     
     m_poolSizes.push_back(poolSize);
@@ -131,4 +131,29 @@ vk::DescriptorSet allocate_descriptor_set(
     logger->print("Allocated descriptor set");
 
     return descriptorSetAttempt.value[0];
+}
+
+void write_storage_image_descriptor(
+    vk::Device device, 
+    vk::DescriptorSet descriptorSet,
+    vk::ImageView imageView,
+    vk::ImageLayout imageLayout,
+    uint32_t binding
+) {
+    vk::DescriptorImageInfo imageInfo = {};
+
+    imageInfo.sampler = nullptr;
+    imageInfo.imageView = imageView;
+    imageInfo.imageLayout = imageLayout;
+
+    vk::WriteDescriptorSet write = {};
+
+    write.dstSet = descriptorSet;
+    write.dstBinding = binding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = vk::DescriptorType::eStorageImage;
+    write.pImageInfo = &imageInfo;
+
+    device.updateDescriptorSets(1, &write, 0, nullptr);
 }

@@ -14,8 +14,9 @@ std::vector<uint32_t> utils::read_file(const char* filename)
     {
         std::stringstream line;
         line << "Failed to load " << filename << std::endl;
-
         logger->print(line.str().c_str());
+        
+        return {};
     }
     
     size_t filesize = static_cast<size_t>(file.tellg());

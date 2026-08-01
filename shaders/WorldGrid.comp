@@ -1,0 +1,139 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0, rgba8) uniform image2D colorBuffer;
+
+layout(push_constant) uniform FramePushConstants
+{
+    mat4 mvp;
+    mat4 invView;
+    mat4 invProj;
+    vec4 cameraPos;
+} pc;
+
+float gridLine(float value, float spacing, float thickness);
+float axisLine2D(vec2 rayOriginPlane, vec2 rayDirPlane, float radius);
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+
+    ivec2 size = imageSize(colorBuffer);
+
+    uint width = uint(size.x);
+    uint height = uint(size.y);
+    uint pixelCount = width * height;
+
+    if(index >= pixelCount) return;
+
+    uint x = index % width;
+    uint y = index / width;
+
+    vec2 uv = vec2(
+        (float(x) + 0.5) / float(width), 
+        (float(y) + 0.5) / float(height)
+    );
+
+    vec2 ndc = (uv * 2.0) - 1.0;
+
+    vec4 nearClip = vec4(ndc, 0.0, 1.0);
+    vec4 farClip = vec4(ndc, 1.0, 1.0);
+
+    vec4 nearView = pc.invProj * nearClip;
+    nearView /= nearView.w;
+
+    vec4 farView = pc.invProj * farClip;
+    farView /= farView.w;
+
+    vec3 nearWorld = (pc.invView * nearView).xyz;
+    vec3 farWorld = (pc.invView * farView).xyz;
+
+    vec3 rayOrigin = nearWorld;
+    vec3 rayDir = normalize(farWorld - nearWorld);
+
+    float denom = rayDir.z;
+
+    vec3 color = vec3(0.1, 0.105, 0.115);
+
+    if(abs(denom) > 0.0001)
+    {
+        float t = -rayOrigin.z / denom;
+        if(t > 0.0)
+        {
+            vec3 hit = rayOrigin + (rayDir * t);
+
+            float minorGrid = max(
+                gridLine(hit.x, 1.0, 0.01),
+                gridLine(hit.y, 1.0, 0.01)
+            );
+
+            float majorGrid = max(
+                gridLine(hit.x, 10.0, 0.03),
+                gridLine(hit.y, 10.0, 0.03)
+            );
+
+            vec3 gridColor = color;
+
+            gridColor += minorGrid * vec3(0.12, 0.12, 0.13);
+            gridColor += majorGrid * vec3(0.25, 0.25, 0.28);
+
+            color = gridColor;
+        }
+    }
+
+    float axisRadius = 0.025;
+
+    float xAxis = axisLine2D(rayOrigin.yz, rayDir.yz, axisRadius);
+    float yAxis = axisLine2D(rayOrigin.xz, rayDir.xz, axisRadius);
+    float zAxis = axisLine2D(rayOrigin.xy, rayDir.xy, axisRadius);
+
+    vec3 xAxisColor = vec3(0.55, 0.08, 0.08);
+    vec3 yAxisColor = vec3(0.10, 0.65, 0.12);
+    vec3 zAxisColor = vec3(0.08, 0.18, 0.65);
+
+    float axisMask = xAxis;
+    vec3 axisColor = xAxisColor;
+
+    if(yAxis > axisMask)
+    {
+        axisMask = yAxis;
+        axisColor = yAxisColor;
+    }
+
+    if(zAxis > axisMask)
+    {
+        axisMask = zAxis;
+        axisColor = zAxisColor;
+    }
+
+    color = mix(color, axisColor, axisMask);
+
+    imageStore(colorBuffer, ivec2(int(x), int(y)), vec4(color, 1.0));
+}
+
+float gridLine(float value, float spacing, float thickness)
+{
+    float halfSpacing = spacing * 0.5;
+    float distToLine = abs(mod((value + halfSpacing), spacing) - halfSpacing);
+
+    return (1.0 - smoothstep(thickness, (thickness * 1.5), distToLine));
+}
+
+float axisLine2D(vec2 rayOriginPlane, vec2 rayDirPlane, float radius)
+{
+    float denom = dot(rayDirPlane, rayDirPlane);
+
+    if(denom < 0.00001)
+        return 0.0;
+
+    float t = -dot(rayOriginPlane, rayDirPlane) / denom;
+
+    if(t <= 0.0)
+        return 0.0;
+
+    vec2 closestPoint = rayOriginPlane + rayDirPlane * t;
+
+    float dist = length(closestPoint);
+
+    return 1.0 - smoothstep(radius, radius * 1.8, dist);
+}

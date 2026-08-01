@@ -28,7 +28,7 @@ public:
     std::vector<vk::Image> images;
     std::vector<vk::ImageView> imageViews;
 
-    void build(
+    bool build(
         vk::Device logicalDevice, 
         vk::PhysicalDevice physicalDevice, 
         vk::SurfaceKHR surface, 

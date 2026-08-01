@@ -3,9 +3,9 @@
 #include <vector>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include "factory/MeshFactory.hpp"
 
@@ -21,13 +21,18 @@
 #include "renderer/resources/pipeline/PipelineLayout.hpp"
 #include "renderer/resources/shaders/Shader.hpp"
 
+namespace
+{
+    constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+}
+
 Engine::Engine(GLFWwindow* window)
 {
     m_logger = Logger::get_logger();
     m_window = window;
 }
 
-void Engine::render_loop(AppState& state)
+void Engine::render_loop(AppState& state, const std::function<InputState()>& getInput)
 {
     state.renderStatus.store(RenderStatus::Initializing, std::memory_order_release);
 
@@ -55,7 +60,7 @@ void Engine::render_loop(AppState& state)
         int width = state.framebufferWidth.load(std::memory_order_relaxed);
         int height = state.framebufferHeight.load(std::memory_order_relaxed);
 
-        if(width <= 0 || height <= 0)
+        if((width <= 0) || (height <= 0))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
@@ -69,9 +74,11 @@ void Engine::render_loop(AppState& state)
             m_rebuildSwapchain = true;
         }
 
+        InputState input = getInput();
         DrawResult result = draw(
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
+            static_cast<uint32_t>(width), 
+            static_cast<uint32_t>(height),
+            input
         );
 
         if(result == DrawResult::Success)
@@ -132,10 +139,13 @@ bool Engine::init(uint32_t width, uint32_t height)
     }
 
     m_surface = vk::SurfaceKHR(rawSurface);
+
+    Logger* logger = m_logger;
+    vk::SurfaceKHR surfaceHandle = m_surface;
     m_instanceDeletionQueue.push_back(
-        [this] (vk::Instance instance)->void {
-            instance.destroySurfaceKHR(m_surface);
-            m_logger->print("Deleted Vulkan surface");
+        [logger, surfaceHandle] (vk::Instance instance)->void {
+            instance.destroySurfaceKHR(surfaceHandle);
+            logger->print("Deleted Vulkan surface");
         }
     );
 
@@ -155,7 +165,8 @@ bool Engine::init(uint32_t width, uint32_t height)
     }
 
     m_graphicsQueueFamilyIndex = find_queue_family_index(
-        m_physicalDevice, m_surface, vk::QueueFlagBits::eGraphics 
+        m_physicalDevice, m_surface, 
+        vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute
     );
 
     if(m_graphicsQueueFamilyIndex == UINT32_MAX)
@@ -193,21 +204,24 @@ bool Engine::init(uint32_t width, uint32_t height)
         vk::ShaderStageFlagBits::eCompute, vk::DescriptorType::eStorageImage
     );
 
-    vk::DescriptorSetLayout descriptorSetLayout = descriptorSetLayoutBuilder.build(m_deviceDeletionQueue);
+    vk::DescriptorSetLayout descriptorSetLayout = 
+        descriptorSetLayoutBuilder.build(m_deviceDeletionQueue);
+    
     if(!descriptorSetLayout)
     {
         shutdown();
         return false;
     }
     
-    m_graphicsInterface.add_descriptor_set_layout(descriptorSetLayout);
-    m_graphicsInterface.add_push_constant_range(
-        vk::ShaderStageFlagBits::eVertex, 0U, sizeof(glm::mat4)
+    m_renderInterface.add_descriptor_set_layout(descriptorSetLayout);
+    m_renderInterface.add_push_constant_range(
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute,
+        0U, sizeof(FramePushConstant)
     );
 
     PipelineLayoutBuilder pipelineLayoutBuilder(m_logicalDevice);
 
-    m_pipelineLayout = pipelineLayoutBuilder.build(m_graphicsInterface, m_deviceDeletionQueue);
+    m_pipelineLayout = pipelineLayoutBuilder.build(m_renderInterface, m_deviceDeletionQueue);
     if(!m_pipelineLayout)
     {
         shutdown();
@@ -215,7 +229,7 @@ bool Engine::init(uint32_t width, uint32_t height)
     }
 
     m_computeShader = make_compute_shader(
-        m_logicalDevice, "shaders/bin/clear_screen.comp.spv", m_graphicsInterface, m_deviceDeletionQueue
+        m_logicalDevice, "shaders/bin/WorldGrid.comp.spv", m_renderInterface, m_deviceDeletionQueue
     );
 
     if(!m_computeShader)
@@ -226,9 +240,9 @@ bool Engine::init(uint32_t width, uint32_t height)
 
     m_shaders = make_shader_object(
         m_logicalDevice, 
-        "shaders/bin/shader.vert.spv", 
-        "shaders/bin/shader.frag.spv", 
-        m_graphicsInterface, 
+        "shaders/bin/Shader.vert.spv", 
+        "shaders/bin/Shader.frag.spv", 
+        m_renderInterface,
         m_deviceDeletionQueue
     );
 
@@ -238,7 +252,7 @@ bool Engine::init(uint32_t width, uint32_t height)
         return false;
     }
 
-    m_frames.reserve(3);
+    m_frames.reserve(MAX_FRAMES_IN_FLIGHT);
     if(!init_render_resources(width, height))
     {
         shutdown();
@@ -247,13 +261,14 @@ bool Engine::init(uint32_t width, uint32_t height)
 
     m_currentTime = glfwGetTime();
     m_lastTime = m_currentTime;
+    m_lastFrameTime = m_currentTime;
     m_numFrames = 0;
 
     m_logger->print("Graphics engine started");
     return true;
 }
 
-Engine::DrawResult Engine::draw(uint32_t width, uint32_t height)
+Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputState& input)
 {
     if(m_rebuildSwapchain)
     {
@@ -276,18 +291,19 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height)
         static_cast<VkDevice>(m_logicalDevice),
         static_cast<VkSwapchainKHR>(m_swapchain.chain),
         UINT64_MAX,
-        static_cast<VkSemaphore>(frame.imageacquiredSemaphore),
+        static_cast<VkSemaphore>(frame.imageAcquiredSemaphore),
         VK_NULL_HANDLE,
         &imageIndex
     );
 
-    if(
-        (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) ||
-        (acquireResult == VK_SUBOPTIMAL_KHR)
-    ) {
+    if(acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+    {
         m_rebuildSwapchain = true;
         return DrawResult::NeedsSwapchainRebuild;
     }
+
+    if(acquireResult == VK_SUBOPTIMAL_KHR)
+        m_rebuildSwapchain = true;
 
     if(acquireResult != VK_SUCCESS)
     {
@@ -295,43 +311,39 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height)
         return DrawResult::FatalError;
     }
 
-    if(m_imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+    if(m_imagesInFlight[imageIndex])
         (void) m_logicalDevice.waitForFences(1, &(m_imagesInFlight[imageIndex]), vk::True, UINT64_MAX);
 
     m_imagesInFlight[imageIndex] = frame.renderFinishedFence;
     (void) m_logicalDevice.resetFences(frame.renderFinishedFence);
     
-    float aspect = 
-        (static_cast<float>(m_swapchain.extent.width) / static_cast<float>(m_swapchain.extent.height));
-
-    float t = glfwGetTime();
-
-    glm::mat4 model = glm::rotate(
-        glm::mat4(1.0f),
-        t,
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-
-    glm::mat4 view = glm::lookAt(
-        glm::vec3(2.0f, 2.0f, 2.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-
-    glm::mat4 proj = glm::perspective(
-        glm::radians(45.0f),
-        aspect,
-        0.1f,
-        10.0f
-    );
-
-    proj[1][1] *= -1.0f;
-
-    glm::mat4 mvp = proj * view * model;
-
-    frame.record_command_buffer(imageIndex, mvp);
+    double now = glfwGetTime();
     
-    vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    float deltaTime = static_cast<float>(now - m_lastFrameTime);
+    m_lastFrameTime = now;
+
+    deltaTime = std::min(deltaTime, 0.1f);
+
+    m_camera.update(deltaTime, input);
+
+    float aspect = (
+        static_cast<float>(m_swapchain.extent.width) /
+        static_cast<float>(m_swapchain.extent.height)
+    );
+
+    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 view = m_camera.view_matrix();
+    glm::mat4 proj = m_camera.projection_matrix(aspect);
+
+    FramePushConstant pushConstants {};
+    pushConstants.mvp = proj * view * model;
+    pushConstants.invView = glm::inverse(view);
+    pushConstants.invProj = glm::inverse(proj);
+    pushConstants.cameraPos = glm::vec4(m_camera.position(), 1.0f);
+    
+    frame.record_command_buffer(imageIndex, pushConstants);
+    
+    vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eComputeShader;
     vk::SubmitInfo submitInfo = {};
 
     submitInfo.commandBufferCount = 1;
@@ -339,7 +351,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height)
     submitInfo.signalSemaphoreCount = 1;
 
     submitInfo.pCommandBuffers = &(frame.commandBuffer);
-    submitInfo.pWaitSemaphores = &(frame.imageacquiredSemaphore);
+    submitInfo.pWaitSemaphores = &(frame.imageAcquiredSemaphore);
     submitInfo.pSignalSemaphores = &(frame.renderFinishedSemaphores[imageIndex]);
     submitInfo.pWaitDstStageMask = &waitStage;
 
@@ -397,7 +409,6 @@ void Engine::update_timing(AppState& state)
         m_lastTime = m_currentTime;
         
         m_numFrames = 0;
-        m_frameTime = 1000.0 / frameRate;
     }
 }
 
@@ -406,10 +417,38 @@ bool Engine::init_render_resources(uint32_t width, uint32_t height)
     if((width == 0) || (height == 0)) 
         return false;
 
-    DescriptorPoolBuilder descriptorPoolBuilder(m_logicalDevice);
-    descriptorPoolBuilder.add_entry(vk::DescriptorType::eStorageImage);
+    bool swapchainAttemptState = m_swapchain.build(
+        m_logicalDevice, m_physicalDevice, m_surface, width, height, m_renderDeletionQueue
+    );
 
-    m_descriptorPool = descriptorPoolBuilder.build(3, m_renderDeletionQueue);
+    if(!swapchainAttemptState)
+    {
+        m_logger->print("Rendering crashed");
+        destroy_render_resources();
+
+        return false;
+    }
+
+    if(m_swapchain.imageViews.empty())
+    {
+        destroy_render_resources();
+        return false;
+    }
+
+    if(m_swapchain.format.format != vk::Format::eR8G8B8A8Unorm)
+    {
+        m_logger->print("Compute background requires R8G8B8A8_UNORN swapchain format");
+        destroy_render_resources();
+
+        return false;
+    }
+
+    uint32_t descriptorSetCount = static_cast<uint32_t>(m_swapchain.imageViews.size());
+
+    DescriptorPoolBuilder descriptorPoolBuilder(m_logicalDevice);
+    descriptorPoolBuilder.add_entry(vk::DescriptorType::eStorageImage, descriptorSetCount);
+
+    m_descriptorPool = descriptorPoolBuilder.build(descriptorSetCount, m_renderDeletionQueue);
     if(!m_descriptorPool)
     {
         m_logger->print("Rendering crashed");
@@ -418,17 +457,34 @@ bool Engine::init_render_resources(uint32_t width, uint32_t height)
         return false;
     }
 
-    m_swapchain.build(m_logicalDevice, m_physicalDevice, m_surface, width, height, m_renderDeletionQueue);
-    if(m_swapchain.imageViews.empty())
-    {
-        m_logger->print("Rendering crashed");
-        destroy_render_resources();
+    m_swapchainImageDescriptorSets.clear();
+    m_swapchainImageDescriptorSets.resize(m_swapchain.imageViews.size());
 
-        return false;
+    for(uint32_t i = 0; i < m_swapchain.imageViews.size(); i++)
+    {
+        m_swapchainImageDescriptorSets[i] = allocate_descriptor_set(
+            m_logicalDevice, m_descriptorPool,
+            m_renderInterface.get_descriptor_set_layouts()[0]
+        );
+
+        if(!m_swapchainImageDescriptorSets[i])
+        {
+            m_logger->print("Failed to allocate swapchain image descriptor set");
+            destroy_render_resources();
+
+            return false;
+        }
+
+        write_storage_image_descriptor(
+            m_logicalDevice, 
+            m_swapchainImageDescriptorSets[i],
+            m_swapchain.imageViews[i], 
+            vk::ImageLayout::eGeneral
+        );
     }
 
     m_depthImage = create_depth_image(
-        m_allocator,m_logicalDevice, m_physicalDevice, m_swapchain.extent, 
+        m_allocator, m_logicalDevice, m_physicalDevice, m_swapchain.extent, 
         m_renderDeletionQueue, m_renderVmaDeletionQueue
     );
 
@@ -457,20 +513,27 @@ bool Engine::init_render_resources(uint32_t width, uint32_t height)
         }
     );
 
-    for(uint32_t i = 0; i < 3; i++)
+    for(uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vk::CommandBuffer commandBuffer = 
             make_command_buffer(m_logicalDevice, m_commandPool, m_renderDeletionQueue);
 
+        if(!commandBuffer)
+        {
+            m_logger->print("Rendering crashed");
+            destroy_render_resources();
+
+            return false;
+        }
+
         m_frames.push_back(Frame(
-            &m_swapchain, m_logicalDevice, &m_shaders, commandBuffer, 
-            m_graphicsInterface.get_descriptor_set_layouts().data(), 
-            &m_descriptorPool, &m_pipelineLayout, &m_depthImage,
-            &m_mesh, m_renderDeletionQueue
+            &m_swapchain, m_logicalDevice, &m_shaders, &m_computeShader, 
+            commandBuffer, &m_swapchainImageDescriptorSets, 
+            &m_pipelineLayout, &m_depthImage, &m_mesh, m_renderDeletionQueue
         ));
     }
 
-    m_imagesInFlight.resize(m_swapchain.imageViews.size(), VK_NULL_HANDLE);
+    m_imagesInFlight.resize(m_swapchain.imageViews.size(), vk::Fence{});
 
     return true;
 }
@@ -479,6 +542,10 @@ void Engine::destroy_render_resources()
 {
     if(m_graphicsQueue)
         (void) m_graphicsQueue.waitIdle();
+
+    m_frames.clear();
+    m_imagesInFlight.clear();
+    m_swapchainImageDescriptorSets.clear();
 
     while(!m_renderDeletionQueue.empty())
     {
@@ -496,8 +563,9 @@ void Engine::destroy_render_resources()
         m_renderVmaDeletionQueue.pop_back();
     }
 
-    m_frames.clear();
-    m_imagesInFlight.clear();
+    m_descriptorPool = vk::DescriptorPool{};
+    m_swapchain = {};
+    m_depthImage = {};
 }
 
 void Engine::shutdown()

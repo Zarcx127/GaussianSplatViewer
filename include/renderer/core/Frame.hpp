@@ -17,6 +17,14 @@
 
 #include "renderer/resources/images/AllocatedImage.hpp"
 
+struct FramePushConstant
+{
+    glm::mat4 mvp;
+    glm::mat4 invView;
+    glm::mat4 invProj;
+    glm::vec4 cameraPos;
+};
+
 class Frame
 {
 public:
@@ -25,7 +33,7 @@ public:
 
     vk::CommandBuffer commandBuffer;
 
-    vk::Semaphore imageacquiredSemaphore;
+    vk::Semaphore imageAcquiredSemaphore;
     std::vector<vk::Semaphore> renderFinishedSemaphores;
     vk::Fence renderFinishedFence;
     
@@ -33,27 +41,28 @@ public:
         Swapchain* swapchain, 
         vk::Device device, 
         std::vector<vk::ShaderEXT>* shaders, 
+        const vk::ShaderEXT* computeShader,
         vk::CommandBuffer& commandBuffer,
-        const vk::DescriptorSetLayout* descriptorSetLayout,
-        const vk::DescriptorPool* descriptorPool,
+        const std::vector<vk::DescriptorSet>* swapchainImageDescriptorSets,
         const vk::PipelineLayout* pipelineLayout,
         const AllocatedImage* depthImage,
         Mesh* mesh, 
         std::deque<std::function<void(vk::Device)>>& deletionQueue
     );
 
-    void record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp);
+    void record_command_buffer(
+        uint32_t imageIndex, const FramePushConstant& pushConstants
+    );
 
 private:
     vk::RenderingInfoKHR m_renderingInfo {};
     vk::RenderingAttachmentInfoKHR m_colorAttachment {};
     vk::RenderingAttachmentInfoKHR m_depthAttachment {};
     
-    const vk::DescriptorSetLayout* m_descriptorSetLayout { nullptr };
-    const vk::DescriptorPool* m_descriptorPool { nullptr };
-    const vk::PipelineLayout* m_pipelineLayout { nullptr };
+    const vk::ShaderEXT* m_computeShader { nullptr };
+    const std::vector<vk::DescriptorSet>* m_swapchainImageDescriptorSets { nullptr };
 
-    vk::DescriptorSet m_descriptorSet;
+    const vk::PipelineLayout* m_pipelineLayout { nullptr };
 
     Mesh* m_mesh;
 
@@ -66,6 +75,8 @@ private:
     void build_depth_attachment();
 
     void initialize_render_state();
+
+    void record_compute_background(uint32_t imageIndex);
 };
 
 #endif

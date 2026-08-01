@@ -104,7 +104,7 @@ uint32_t find_queue_family_index(
                 canPresent = false;
 
         bool supported = false;
-        if(queueFamily.queueFlags & queueType)
+        if((queueFamily.queueFlags & queueType) == queueType)
             supported = true;
 
         if(canPresent && supported)
@@ -202,21 +202,10 @@ namespace
         using Device = vk::PhysicalDeviceType;
         switch(properties.deviceType)
         {
-            case Device::eDiscreteGpu:
-                return 5; 
-                break;
-            
-            case Device::eIntegratedGpu:
-                return 4; 
-                break;
-            
-            case Device::eVirtualGpu:
-                return 3; 
-                break;
-            
-            case Device::eCpu:
-                return 2; 
-                break;
+            case Device::eDiscreteGpu: return 5;
+            case Device::eIntegratedGpu: return 4; 
+            case Device::eVirtualGpu: return 3; 
+            case Device::eCpu: return 2; 
         }
 
         return 1;

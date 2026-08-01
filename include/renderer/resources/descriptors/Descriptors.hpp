@@ -33,7 +33,7 @@ public:
 
     vk::DescriptorPool build(uint32_t descriptorSetCount, std::deque<std::function<void(vk::Device)>>& deletionQueue);
 
-    void add_entry(vk::DescriptorType bindingType);
+    void add_entry(vk::DescriptorType bindingType, uint32_t descriptorCount);
 
 private:
     vk::Device* m_device;
@@ -45,6 +45,14 @@ vk::DescriptorSet allocate_descriptor_set(
     vk::Device device, 
     const vk::DescriptorPool& descriptorPool, 
     const vk::DescriptorSetLayout& descriptorSetLayout
+);
+
+void write_storage_image_descriptor(
+    vk::Device device, 
+    vk::DescriptorSet descriptorSet,
+    vk::ImageView imageView,
+    vk::ImageLayout imageLayout,
+    uint32_t binding = 0
 );
 
 #endif

@@ -3,8 +3,6 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#define GLFW_INCLUDE_VULKAN
-
 #include <deque> 
 #include <functional>
 
@@ -17,6 +15,10 @@
 
 #include "logging/Logger.hpp"
 
+#include "input/InputState.hpp"
+
+#include "renderer/camera/EditorCamera.hpp"
+
 #include "renderer/core/Frame.hpp"
 #include "renderer/core/Swapchain.hpp"
 
@@ -28,7 +30,9 @@ class Engine
 public:
     Engine(GLFWwindow* window);
 
-    void render_loop(AppState& state);
+    void render_loop(
+        AppState& state, const std::function<InputState()>& getInput
+    );
     
     ~Engine();
     
@@ -62,9 +66,10 @@ private:
 
     Mesh m_mesh;
 
-    ShaderInterface m_graphicsInterface;
+    ShaderInterface m_renderInterface;
 
     vk::DescriptorPool m_descriptorPool;
+    std::vector<vk::DescriptorSet> m_swapchainImageDescriptorSets;
     vk::PipelineLayout m_pipelineLayout;
 
     vk::CommandPool m_commandPool;
@@ -73,11 +78,13 @@ private:
     AllocatedImage m_depthImage;
     std::vector<Frame> m_frames;
 
+    EditorCamera m_camera;
+
     std::vector<vk::Fence> m_imagesInFlight;
 
     double m_currentTime;
     double m_lastTime;
-    double m_frameTime;
+    double m_lastFrameTime;
 
     uint32_t m_currFrame { 0 };
     uint32_t m_numFrames { 0 };
@@ -95,7 +102,7 @@ private:
 
     bool init(uint32_t width, uint32_t height);
 
-    DrawResult draw(uint32_t width, uint32_t height);
+    DrawResult draw(uint32_t width, uint32_t height, const InputState& input);
     void update_timing(AppState& state);
 
     bool init_render_resources(uint32_t width, uint32_t height);

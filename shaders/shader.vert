@@ -8,6 +8,9 @@ layout(location = 0) out vec3 fragColor;
 layout(push_constant) uniform PushConstants
 {
     mat4 mvp;
+    mat4 invView;
+    mat4 invProj;
+    vec4  cameraPos;
 } pc;
 
 void main()

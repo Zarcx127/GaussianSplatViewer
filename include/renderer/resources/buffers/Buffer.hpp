@@ -9,9 +9,7 @@
 
 void copy_buffer(
     vk::Buffer srcBuffer,
-    VmaAllocationInfo srcInfo,
     vk::Buffer dstBuffer,
-    VmaAllocationInfo dstInfo,
     vk::DeviceSize copySize,
     vk::Device device,
     vk::Queue queue,

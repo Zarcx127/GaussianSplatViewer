@@ -13,7 +13,11 @@ Window::Window(int width, int height, const char* name)
 
 bool Window::build_window()
 {
-    glfwInit();
+    if(!glfwInit())
+    {
+        m_logger->print("GLFW Initialization failed");
+        return false;
+    }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);

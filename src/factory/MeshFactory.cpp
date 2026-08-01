@@ -44,7 +44,7 @@ Mesh build_cube(
 
     Mesh mesh;
     Vertex vertices[] = {
-        // front, red
+        // top, red
         {{-0.5f, -0.5f,  0.5f}, {1, 0, 0}},
         {{ 0.5f, -0.5f,  0.5f}, {1, 0, 0}},
         {{ 0.5f,  0.5f,  0.5f}, {1, 0, 0}},
@@ -52,7 +52,7 @@ Mesh build_cube(
         {{ 0.5f,  0.5f,  0.5f}, {1, 0, 0}},
         {{-0.5f,  0.5f,  0.5f}, {1, 0, 0}},
 
-        // back, green
+        // bottom, green
         {{ 0.5f, -0.5f, -0.5f}, {0, 1, 0}},
         {{-0.5f, -0.5f, -0.5f}, {0, 1, 0}},
         {{-0.5f,  0.5f, -0.5f}, {0, 1, 0}},
@@ -76,7 +76,7 @@ Mesh build_cube(
         {{ 0.5f,  0.5f, -0.5f}, {1, 1, 0}},
         {{ 0.5f,  0.5f,  0.5f}, {1, 1, 0}},
 
-        // top, purple
+        // front, pink
         {{-0.5f,  0.5f,  0.5f}, {1, 0, 1}},
         {{ 0.5f,  0.5f,  0.5f}, {1, 0, 1}},
         {{ 0.5f,  0.5f, -0.5f}, {1, 0, 1}},
@@ -84,7 +84,7 @@ Mesh build_cube(
         {{ 0.5f,  0.5f, -0.5f}, {1, 0, 1}},
         {{-0.5f,  0.5f, -0.5f}, {1, 0, 1}},
 
-        // bottom, cyan
+        // back, cyan
         {{-0.5f, -0.5f, -0.5f}, {0, 1, 1}},
         {{ 0.5f, -0.5f, -0.5f}, {0, 1, 1}},
         {{ 0.5f, -0.5f,  0.5f}, {0, 1, 1}},
@@ -147,7 +147,7 @@ Mesh build_cube(
 
     logger->log(vertexInfo);
 
-    copy_buffer(stagingBuffer, stagingInfo, vertexBuffer, vertexInfo, ALLOC_SIZE, device, queue, commandPool);
+    copy_buffer(stagingBuffer, vertexBuffer, ALLOC_SIZE, device, queue, commandPool);
 
     mesh.buffer = vertexBuffer;
     mesh.allocation = vertexAllocation;
@@ -170,4 +170,3 @@ Mesh build_cube(
 
     return mesh;
 }
-

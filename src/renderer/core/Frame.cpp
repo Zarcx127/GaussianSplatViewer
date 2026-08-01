@@ -1,5 +1,7 @@
 #include "renderer/core/Frame.hpp"
 
+#include <array>
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -10,34 +12,30 @@
 #include "renderer/core/Image.hpp"
 #include "renderer/core/Synchronization.hpp"
 
-#include "renderer/resources/descriptors/Descriptors.hpp"
-
 Frame::Frame(
     Swapchain* swapchain, 
     vk::Device device, 
     std::vector<vk::ShaderEXT>* shaders, 
+    const vk::ShaderEXT* computeShader,
     vk::CommandBuffer& commandBuffer,
-    const vk::DescriptorSetLayout* descriptorSetLayout,
-    const vk::DescriptorPool* descriptorPool,
+    const std::vector<vk::DescriptorSet>* swapchainImageDescriptorSets,
     const vk::PipelineLayout* pipelineLayout,
     const AllocatedImage* depthImage,
-    Mesh* mesh,
+    Mesh* mesh, 
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     this->swapchain = swapchain;
     this->shaders = shaders;
     this->commandBuffer = commandBuffer;
 
-    m_descriptorSetLayout = descriptorSetLayout;
-    m_descriptorPool = descriptorPool;
+    m_computeShader = computeShader;
+    m_swapchainImageDescriptorSets = swapchainImageDescriptorSets;
     m_pipelineLayout = pipelineLayout;
     m_depthImage = depthImage;
-    
-    m_descriptorSet = allocate_descriptor_set(device, *descriptorPool, *descriptorSetLayout);
-    
+        
     m_mesh = mesh;
 
-    imageacquiredSemaphore = make_semaphore(device, deletionQueue);
+    imageAcquiredSemaphore = make_semaphore(device, deletionQueue);
 
     renderFinishedSemaphores.resize(swapchain->imageViews.size());
     for(vk::Semaphore& renderFinishedSemaphore : renderFinishedSemaphores)
@@ -46,8 +44,9 @@ Frame::Frame(
     renderFinishedFence = make_fence(device, deletionQueue);
 }
 
-void Frame::record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp) 
-{
+void Frame::record_command_buffer(
+    uint32_t imageIndex, const FramePushConstant& pushConstants
+) {
     (void) commandBuffer.reset();
 
     build_color_attachment(imageIndex);
@@ -63,10 +62,31 @@ void Frame::record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp)
         commandBuffer,
         swapchain->images[imageIndex],
         vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::eGeneral,
         vk::AccessFlagBits::eNone,
-        vk::AccessFlagBits::eColorAttachmentWrite,
+        vk::AccessFlagBits::eShaderWrite,
         vk::PipelineStageFlagBits::eTopOfPipe,
+        vk::PipelineStageFlagBits::eComputeShader 
+    );
+
+    commandBuffer.pushConstants(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute,
+        0,
+        sizeof(FramePushConstant),
+        &pushConstants
+    );
+
+    record_compute_background(imageIndex);
+
+    transition_image_layout(
+        commandBuffer,
+        swapchain->images[imageIndex],
+        vk::ImageLayout::eGeneral,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::AccessFlagBits::eShaderWrite,
+        vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eColorAttachmentOutput 
     );
 
@@ -81,14 +101,6 @@ void Frame::record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp)
 
     commandBuffer.bindShadersEXT(stages, *shaders);
     commandBuffer.bindVertexBuffers(0, 1, &(m_mesh->buffer), &(m_mesh->offset));
-
-    commandBuffer.pushConstants(
-        *m_pipelineLayout,
-        vk::ShaderStageFlagBits::eVertex,
-        0,
-        sizeof(glm::mat4),
-        &mvp
-    );
     
     commandBuffer.draw(m_mesh->numOfVertices, 1, 0, 0);
 
@@ -123,8 +135,8 @@ void Frame::build_rendering_info()
 void Frame::build_color_attachment(uint32_t imageIndex)
 {
     m_colorAttachment.imageView = swapchain->imageViews[imageIndex];
-    m_colorAttachment.imageLayout = vk::ImageLayout::eAttachmentOptimal;
-    m_colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+    m_colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    m_colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
     m_colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
     m_colorAttachment.clearValue = vk::ClearValue({0.0f, 0.0f, 0.0f, 1.0f});
 }
@@ -187,4 +199,33 @@ void Frame::initialize_render_state()
 	commandBuffer.setPrimitiveRestartEnable(vk::False);
 
     commandBuffer.setDepthCompareOp(vk::CompareOp::eLess);
+}
+
+void Frame::record_compute_background(uint32_t imageIndex)
+{
+    std::array<vk::ShaderStageFlagBits, 1> stages = {
+        vk::ShaderStageFlagBits::eCompute
+    };
+
+    std::array<vk::ShaderEXT, 1> computeShaders = {
+        *m_computeShader
+    };
+
+    commandBuffer.bindShadersEXT(stages, computeShaders);
+
+    vk::DescriptorSet descriptorSet = (*m_swapchainImageDescriptorSets)[imageIndex];
+    commandBuffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eCompute,
+        *m_pipelineLayout,
+        0,
+        1,
+        &descriptorSet,
+        0,
+        nullptr
+    );
+
+    uint32_t pixelCount = swapchain->extent.width * swapchain->extent.height;
+    uint32_t groupCount = (pixelCount + 63) / 64;
+
+    commandBuffer.dispatch(groupCount, 1, 1);
 }

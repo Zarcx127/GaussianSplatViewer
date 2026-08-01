@@ -4,7 +4,7 @@
 
 #include "renderer/core/Image.hpp"
 
-void Swapchain::build(
+bool Swapchain::build(
     vk::Device logicalDevice, 
     vk::PhysicalDevice physicalDevice, 
     vk::SurfaceKHR surface, 
@@ -29,9 +29,26 @@ void Swapchain::build(
     vk::PresentModeKHR presentMode = choose_present_mode(support.presentModes);
 
     extent = choose_extent(width, height, support.capabilities);
+    if((extent.width == 0) || (extent.height == 0)) 
+    {
+        logger->print("Swapchain failed to create because drawable extent is invalid");
+        return true;
+    }
+
     imageCount = support.capabilities.minImageCount + 1;
     if(support.capabilities.maxImageCount > 0)
         imageCount = std::min(imageCount, support.capabilities.maxImageCount);
+
+    vk::ImageUsageFlags imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+    if(support.capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eStorage)
+    {
+        imageUsage |= vk::ImageUsageFlagBits::eStorage;
+    }
+    else
+    {
+        logger->print("Swapchain images do not support storage image usage");
+        return false;
+    }
 
     vk::SwapchainCreateInfoKHR createInfo = vk::SwapchainCreateInfoKHR(
         vk::SwapchainCreateFlagsKHR(),
@@ -41,7 +58,7 @@ void Swapchain::build(
         format.colorSpace,
         extent,
         1,
-        vk::ImageUsageFlagBits::eColorAttachment,
+        imageUsage,
         vk::SharingMode::eExclusive
     );
 
@@ -58,7 +75,7 @@ void Swapchain::build(
     if(swapChainAttempt != vk::Result::eSuccess)
     {
         logger->print("Failed to create swapchain");
-        return;
+        return false;
     }
 
     chain = newSwapchain;
@@ -77,7 +94,7 @@ void Swapchain::build(
     if(imagesAttempt.result != vk::Result::eSuccess)
     {
         logger->print("Failed to get images");
-        return;
+        return false;
     }
 
     images = imagesAttempt.value;
@@ -95,6 +112,8 @@ void Swapchain::build(
             }
         );
     }
+
+    return true;
 }
 
 SurfaceDetails Swapchain::query_surface_support(
@@ -141,20 +160,29 @@ vk::Extent2D Swapchain::choose_extent(
 
 vk::PresentModeKHR Swapchain::choose_present_mode(const std::vector<vk::PresentModeKHR>& presentModes)
 {
-    for(vk::PresentModeKHR mode : presentModes)
+    Logger* logger = Logger::get_logger();
+    for(const vk::PresentModeKHR& mode : presentModes)
+    {
         if(mode == vk::PresentModeKHR::eMailbox)
+        {
+            logger->print("Swapchain using mailbox present mode");
+            
             return mode;
+        }
+    }
+
+    logger->print("Swapchain using fifo present mode");
 
     return vk::PresentModeKHR::eFifo;
 }
 
 vk::SurfaceFormatKHR Swapchain::choose_surface_format(const std::vector<vk::SurfaceFormatKHR>& formats)
 {
-    for(vk::SurfaceFormatKHR format : formats)
+    for(const vk::SurfaceFormatKHR& format : formats)
     {
         if(
-            (format.format == vk::Format::eB8G8R8A8Unorm) 
-            && (format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            (format.format == vk::Format::eR8G8B8A8Unorm) && 
+            (format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
         ) {
             return format;
         }

@@ -18,9 +18,7 @@ vk::Semaphore make_semaphore(
     vk::Semaphore semaphore = semaphoreAttempt.value;
     deviceDeletionQueue.push_back(
         [logger, semaphore] (vk::Device device)->void {
-            (void) device.waitIdle();
             device.destroySemaphore(semaphore);
-
             logger->print("Deleted semaphore");
         }
     );
@@ -47,9 +45,7 @@ vk::Fence make_fence(
     vk::Fence fence = fenceAttempt.value;
     deviceDeletionQueue.push_back(
         [logger, fence] (vk::Device device)->void {
-            (void) device.waitIdle();
             device.destroyFence(fence);
-            
             logger->print("Deleted fence");
         }
     );

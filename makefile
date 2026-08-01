@@ -12,7 +12,7 @@ JOBS := $(shell set /a NUMBER_OF_PROCESSORS-1)
 CC := g++
 FLAGS_OBJ := -std=c++17 -O2 -Werror \
 	-DVULKAN_HPP_NO_EXCEPTIONS \
-	-DGLFW_INCLUDE_NONE \
+	-DGLFW_INCLUDE_VULKAN \
 	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 
 INCLUDE := -I$(INC_DIR) -I$(subst \,/,$(VULKAN_SDK))/Include
@@ -92,7 +92,7 @@ run:
 	@$(OUT) 
 
 all: build_shaders $(OBJs)
-	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(OUT)" $(FLAGS_EXE)
+	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(OUT)" $(FLAGS_EXE) 
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
@@ -129,8 +129,8 @@ create:
 	@if not exist "$(INC_DIR)$(DIRPATH)" mkdir "$(INC_DIR)$(DIRPATH)"
 	@if not exist "$(SRC_DIR)$(DIRPATH)" mkdir "$(SRC_DIR)$(DIRPATH)"
 
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)addFile.ps1" -FilePath "$(INC_DIR)$(FILE)" -Type "hpp"
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)addFile.ps1" -FilePath "$(SRC_DIR)$(FILE)" -Type "cpp"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(INC_DIR)$(FILE)" -Type "hpp"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(SRC_DIR)$(FILE)" -Type "cpp"
 
 	@echo $(FILE).cpp and $(FILE).hpp created
 
@@ -143,8 +143,8 @@ delete:
 	@if exist "$(INC_DIR)$(FILE).hpp" powershell $(PSFLAGS) -Command "Remove-Item '$(INC_DIR)$(FILE).hpp'"
 	@if exist "$(SRC_DIR)$(FILE).cpp" powershell $(PSFLAGS) -Command "Remove-Item '$(SRC_DIR)$(FILE).cpp'"
 
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)cleanUp.ps1" -path "$(INC_DIR)$(dir $(FILE))" -root "$(INC_DIR)"
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)cleanUp.ps1" -path "$(SRC_DIR)$(dir $(FILE))" -root "$(SRC_DIR)"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)CleanUp.ps1" -path "$(INC_DIR)$(dir $(FILE))" -root "$(INC_DIR)"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)CleanUp.ps1" -path "$(SRC_DIR)$(dir $(FILE))" -root "$(SRC_DIR)"
 
 	@echo $(FILE).cpp and $(FILE).hpp deleted
 
