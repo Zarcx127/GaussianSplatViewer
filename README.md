@@ -5,7 +5,7 @@ The renderer is made with Vulkan and GLSL.
 Currently, it runs ONLY on Windows 10 or later with a GPU that has Vulkan support. 
 Most GPUs including integrated ones like Intel UHD Graphics should have this by default.
 
-<img width="637" height="505" alt="Image" src="https://github.com/user-attachments/assets/360a318e-c7a8-4382-b2f5-a0f06f090f81" />
+<img width="510" height="404" alt="Image" src="https://github.com/user-attachments/assets/360a318e-c7a8-4382-b2f5-a0f06f090f81" />
 
 ### Requirements (for running)
 
