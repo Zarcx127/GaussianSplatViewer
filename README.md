@@ -17,9 +17,8 @@ Most GPUs including integrated ones like Intel UHD Graphics should have this by 
 4. 8 GB RAM (recommended)
 
 ***Note:***<br>
-Since GPU cap is not currently implemented it would utilise all GPU resources if unrestricted.
-This should not cause any problems. 
-To prevent overheating, close the viewer when it is not in use.
+Since there is no frame rate limiter, the GPU would utilise all available resources (unless externally restricted).
+Close the viewer when not in use to reduce power consumption and heat.
 
 ### Troubleshooting (Running)
 
@@ -28,7 +27,7 @@ If you do not trust the executable in release, you can always just build the pro
 (Refer to Code Installation below)
 
 If the viewer feels laggy, shrink the size of the window.
-This is to reduce the number of splats that need to be processed, so you will get a smoother experience
+This is to reduce the per-pixel GPU work, so you will get a smoother experience
 
 ## Controls
 
