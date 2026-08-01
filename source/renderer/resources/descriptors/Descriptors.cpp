@@ -157,3 +157,29 @@ void write_storage_image_descriptor(
 
     device.updateDescriptorSets(1, &write, 0, nullptr);
 }
+
+void write_storage_buffer_descriptor(
+    vk::Device device,
+    vk::DescriptorSet descriptorSet,
+    vk::Buffer buffer,
+    vk::DeviceSize offset,
+    vk::DeviceSize range,
+    uint32_t binding
+) {
+    vk::DescriptorBufferInfo bufferInfo = {};
+
+    bufferInfo.buffer = buffer;
+    bufferInfo.offset = offset;
+    bufferInfo.range = range;
+
+    vk::WriteDescriptorSet write = {};
+
+    write.dstSet = descriptorSet;
+    write.dstBinding = binding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = vk::DescriptorType::eStorageBuffer;
+    write.pBufferInfo = &bufferInfo;
+
+    device.updateDescriptorSets(1, &write, 0, nullptr);
+}

@@ -13,10 +13,10 @@
 
 struct FramePushConstant
 {
-    glm::mat4 mvp;
-    glm::mat4 invView;
-    glm::mat4 invProj;
-    glm::vec4 cameraPos;
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::vec4 cameraPosition;
+    glm::uvec4 renderInfo;
 };
 
 struct RenderTarget

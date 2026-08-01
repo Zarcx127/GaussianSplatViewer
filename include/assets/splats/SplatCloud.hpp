@@ -3,8 +3,9 @@
 #ifndef ASSETS_SPLATS_SPLAT_CLOUD_H
 #define ASSETS_SPLATS_SPLAT_CLOUD_H
 
-#include <cstddef>
 #include <vector>
+#include <cstddef>
+#include <cstdint>
 
 #include <glm/glm.hpp>
 
@@ -15,7 +16,7 @@ struct SplatVertex
     float opacity { 1.0f };
 
     glm::vec3 logScale {};
-    glm::vec4 rotation { 1.0f, 0.0f, 0.0f, 0.0f };
+    glm::vec4 rotation { 0.0f, 0.0f, 0.0f, 1.0f };
 };
 
 struct SplatCloudInfo
@@ -26,6 +27,8 @@ struct SplatCloudInfo
     bool hasScale { false };
     bool hasRotation { false };
 
+    uint32_t sphericalHarmonicDegree { 0 };
+
     const char* sourcePath { nullptr };
 };
 
@@ -33,6 +36,7 @@ class SplatCloud
 {
 public:
     std::vector<SplatVertex> splats;
+    std::vector<glm::vec3> sphericalHarmonics;
 
     glm::vec3 boundsMin {};
     glm::vec3 boundsMax {};
@@ -42,6 +46,8 @@ public:
     bool empty() const;
 
     uint32_t splat_count() const;
+
+    uint32_t spherical_harmonic_coefficient_count() const;
 
     glm::vec3 center() const;
 

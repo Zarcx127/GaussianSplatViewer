@@ -5,7 +5,7 @@
 #include "renderer/core/Image.hpp"
 
 #include "renderer/passes/BackgroundPass.hpp"
-#include "renderer/passes/SplatPointPass.hpp"
+#include "renderer/passes/SplatGaussianPass.hpp"
 
 namespace
 {
@@ -52,7 +52,10 @@ bool record_frame_commands(
         !context.target.depthImage.image ||
         !context.target.depthImage.imageView ||
         !context.pipelineLayout ||
+        !context.splatPointPipeline ||
         !context.features.backgroundPipeline ||
+        !context.features.sphericalHarmonicBuffer.buffer.buffer ||
+        !context.features.sphericalHarmonicDescriptorSet ||
         !context.features.splatBuffer.buffer.buffer ||
         (context.features.splatBuffer.splatCount == 0)
     ) {
@@ -127,9 +130,11 @@ bool record_frame_commands(
 
     commandBuffer.beginRenderingKHR(renderingInfo);
 
-    record_splat_point_pass(
+    record_splat_gaussian_pass(
         commandBuffer, 
         context.splatPointPipeline, 
+        context.pipelineLayout,
+        context.features.sphericalHarmonicDescriptorSet,
         context.features.splatBuffer
     );
 

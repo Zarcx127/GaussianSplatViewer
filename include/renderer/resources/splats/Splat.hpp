@@ -30,4 +30,12 @@ struct SplatBuffer
     glm::vec3 boundsMax {};
 };
 
+struct SphericalHarmonicBuffer
+{
+    AllocatedBuffer buffer {};
+
+    uint32_t degree { 0 };
+    uint32_t coefficientCount { 0 };
+};
+
 #endif

@@ -94,11 +94,11 @@ bool RenderResources::build(
         return false;
     }
 
-    GraphicsPipelineConfig splatPipelineConfig = get_splat_point_pipeline_config();
+    GraphicsPipelineConfig splatPipelineConfig = get_splat_gaussian_pipeline_config();
     m_splatPointPipeline = make_graphics_pipeline(
         context.logicalDevice,
-        "shaders/bin/SplatPoint.vert.spv",
-        "shaders/bin/SplatPoint.frag.spv",
+        "shaders/bin/SplatGaussian.vert.spv",
+        "shaders/bin/SplatGaussian.frag.spv",
         splatPipelineConfig,
         context.pipelineLayout,
         m_swapchain.format.format,
@@ -227,7 +227,7 @@ uint32_t RenderResources::color_image_view_count() const
     return static_cast<uint32_t>(m_swapchain.imageViews.size());
 }
 
-vk::Pipeline RenderResources::splat_point_pipeline() const
+vk::Pipeline RenderResources::splat_gaussian_pipeline() const
 {
     return m_splatPointPipeline;
 }

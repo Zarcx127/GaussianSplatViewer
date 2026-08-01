@@ -17,7 +17,7 @@ namespace
     constexpr std::chrono::milliseconds RESIZE_DEBOUNCE_TIME = 
         std::chrono::milliseconds(50);
 
-    constexpr const char* SPLAT_PATH = "splats/cat.ply";
+    constexpr const char* SPLAT_PATH = "splats/scene.ply";
 }
 
 Engine::Engine(GLFWwindow* window)
@@ -150,16 +150,37 @@ bool Engine::init(uint32_t width, uint32_t height)
         vk::ShaderStageFlagBits::eCompute, vk::DescriptorType::eStorageImage
     );
 
-    vk::DescriptorSetLayout descriptorSetLayout = 
-        descriptorSetLayoutBuilder.build(m_interfaceDeletionQueue);
-    
-    if(!descriptorSetLayout)
+    m_descriptorSetLayout = descriptorSetLayoutBuilder.build(m_interfaceDeletionQueue);
+    if(!m_descriptorSetLayout)
     {
         shutdown();
         return false;
     }
     
-    m_renderInterface.add_descriptor_set_layout(descriptorSetLayout);
+    m_renderInterface.add_descriptor_set_layout(m_descriptorSetLayout);
+
+    DescriptorSetLayoutBuilder sphericalHarmonicLayoutBuilder(
+        m_vulkanContext.logical_device_ref()
+    );
+
+    sphericalHarmonicLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eVertex,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    m_sphericalHarmonicDescriptorSetLayout = 
+        sphericalHarmonicLayoutBuilder.build(m_interfaceDeletionQueue);
+
+    if(!m_sphericalHarmonicDescriptorSetLayout)
+    {
+        shutdown();
+        return false;
+    }
+
+    m_renderInterface.add_descriptor_set_layout(
+        m_sphericalHarmonicDescriptorSetLayout
+    );
+
     m_renderInterface.add_push_constant_range(
         vk::ShaderStageFlagBits::eVertex,
         0U, sizeof(FramePushConstant)
@@ -270,15 +291,19 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
         static_cast<float>(renderExtent.height)
     );
 
-    glm::mat4 model = glm::mat4(1.0f);
-    glm::mat4 view = m_camera.view_matrix();
-    glm::mat4 proj = m_camera.projection_matrix(aspect);
+    RenderFeatureFrameInfo featureInfo = m_renderFeatures.frame_info();
 
     FramePushConstant pushConstants {};
-    pushConstants.mvp = proj * view * model;
-    pushConstants.invView = glm::inverse(view);
-    pushConstants.invProj = glm::inverse(proj);
-    pushConstants.cameraPos = glm::vec4(m_camera.position(), 1.0f);
+
+    pushConstants.view = m_camera.view_matrix();
+    pushConstants.projection = m_camera.projection_matrix(aspect);
+    pushConstants.cameraPosition = glm::vec4(m_camera.position(), 1.0f);
+    pushConstants.renderInfo = glm::uvec4(
+        renderExtent.width,
+        renderExtent.height,
+        featureInfo.sphericalHarmonicBuffer.degree,
+        featureInfo.sphericalHarmonicBuffer.coefficientCount
+    );
 
     if(
         (imageIndex >= m_renderResources.color_image_count()) ||
@@ -321,9 +346,9 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     RenderFrameContext renderContext = {
         renderTarget,
-        m_renderResources.splat_point_pipeline(),
+        m_renderResources.splat_gaussian_pipeline(),
         m_pipelineLayout,
-        m_renderFeatures.frame_info()
+        featureInfo
     };
 
     bool renderSuccessful = record_frame_commands(
@@ -442,7 +467,8 @@ RenderFeaturesContext Engine::make_render_features_context()
         m_vulkanContext.allocator(),
         m_vulkanContext.command_pool(),
         m_vulkanContext.graphics_queue(),
-        m_pipelineLayout
+        m_pipelineLayout,
+        m_sphericalHarmonicDescriptorSetLayout
     };
 }
 
@@ -476,6 +502,7 @@ void Engine::shutdown()
         m_interfaceDeletionQueue.pop_back();
     }
 
+    m_sphericalHarmonicDescriptorSetLayout = vk::DescriptorSetLayout();
     m_pipelineLayout = vk::PipelineLayout();
     m_renderInterface = ShaderInterface();
 

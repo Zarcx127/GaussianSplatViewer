@@ -16,13 +16,18 @@
 
 #include "renderer/resources/splats/Splat.hpp"
 
-vk::VertexInputBindingDescription get_splat_vertex_binding_description();
-
-std::array<vk::VertexInputAttributeDescription, 2> get_splat_vertex_attribute_descriptions();
-
-GraphicsPipelineConfig get_splat_point_pipeline_config();
+GraphicsPipelineConfig get_splat_gaussian_pipeline_config();
 
 SplatBuffer build_splat_buffer(
+    const SplatCloud& cloud,
+    VmaAllocator& allocator,
+    vk::Device& device,
+    vk::CommandPool& commandPool,
+    vk::Queue& queue,
+    std::deque<std::function<void(VmaAllocator)>>& deletionQueue
+);
+
+SphericalHarmonicBuffer build_spherical_harmonic_buffer(
     const SplatCloud& cloud,
     VmaAllocator& allocator,
     vk::Device& device,

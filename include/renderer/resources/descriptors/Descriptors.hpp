@@ -55,4 +55,13 @@ void write_storage_image_descriptor(
     uint32_t binding = 0
 );
 
+void write_storage_buffer_descriptor(
+    vk::Device device,
+    vk::DescriptorSet descriptorSet,
+    vk::Buffer buffer,
+    vk::DeviceSize offset,
+    vk::DeviceSize range,
+    uint32_t binding = 0
+);
+
 #endif

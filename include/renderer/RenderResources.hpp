@@ -64,7 +64,7 @@ public:
 
     const AllocatedImage& depth_image() const;
 
-    vk::Pipeline splat_point_pipeline() const;
+    vk::Pipeline splat_gaussian_pipeline() const;
 
     vk::DescriptorSet swapchain_storage_descriptor_set(uint32_t imageIndex) const;
     uint32_t swapchain_storage_descriptor_set_count() const;

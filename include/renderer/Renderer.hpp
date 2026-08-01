@@ -52,6 +52,9 @@ private:
 
     ShaderInterface m_renderInterface;
 
+    vk::DescriptorSetLayout m_descriptorSetLayout {};
+    vk::DescriptorSetLayout m_sphericalHarmonicDescriptorSetLayout {};
+
     vk::PipelineLayout m_pipelineLayout {};
 
     RenderFeatures m_renderFeatures;

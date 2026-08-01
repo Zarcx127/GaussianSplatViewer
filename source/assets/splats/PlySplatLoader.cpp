@@ -1,6 +1,5 @@
 ﻿#include "assets/splats/PlySplatLoader.hpp"
 
-#include <array>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -11,14 +10,15 @@
 
 #include "assets/ply/PlyReader.hpp"
 
+#include "assets/splats/details/PlySplatProperties.hpp"
+#include "assets/splats/details/PlySphericalHarmonics.hpp"
+
 namespace
 {
-    SplatCloudInfo make_splat_info(const std::vector<PlyProperty>& properties);
-
     bool apply_splat_property(
         SplatVertex& splat,
         glm::vec3& rgb,
-        glm::vec3& dc,
+        std::vector<glm::vec3>& sphericalHarmonics,
         const PlyProperty& property,
         double value,
         const char*& error
@@ -27,12 +27,18 @@ namespace
     void finalize_splat_color(
         SplatVertex& splat,
         const glm::vec3& rgb,
-        const glm::vec3& dc,
+        const std::vector<glm::vec3>& sphericalHarmonics,
         const SplatCloudInfo& info
     );
 
     bool normalize_color(float& component, double value, const PlyScalarInfo& info);
     bool assign_splat_float(float& destination, double value, const char*& error);
+    bool assign_spherical_harmonic(
+        std::vector<glm::vec3>& sphericalHarmonics,
+        const std::string& name,
+        double value,
+        const char*& error
+    );
 
     void grow_bounds(SplatCloud& cloud, const glm::vec3& position, bool firstSplat);
 
@@ -54,14 +60,34 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
         return result;
     }
 
-    result.cloud.info = make_splat_info(reader.vertex_properties());
+    PlySphericalHarmonicLayout sphericalHarmonicLayout = {};
+
+    if(!inspect_ply_spherical_harmonics(
+        reader.vertex_properties(), sphericalHarmonicLayout, result.error
+    )) {
+        return result;
+    }
+
+    inspect_ply_splat_properties(
+        reader.vertex_properties(), result.cloud.info
+    );
+
+    result.cloud.info.hasDcColor= sphericalHarmonicLayout.hasDc;
+    result.cloud.info.sphericalHarmonicDegree = sphericalHarmonicLayout.degree;
+
+    uint32_t sphericalCoefficientCount = sphericalHarmonicLayout.coefficientCount;
+
     result.cloud.splats.reserve(reader.vertex_count());
+    result.cloud.sphericalHarmonics.reserve(
+        reader.vertex_count() * sphericalCoefficientCount
+    );
+
+    std::vector<glm::vec3> sphericalHarmonics(sphericalCoefficientCount);
 
     for(uint64_t vertexIndex = 0; vertexIndex < reader.vertex_count(); vertexIndex++)
     {
         SplatVertex splat = {};
         glm::vec3 rgb = {};
-        glm::vec3 dc = {};
 
         for(const PlyProperty& property : reader.vertex_properties())
         {
@@ -72,8 +98,10 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
                 return result;
             }
 
-            if(!apply_splat_property(splat, rgb, dc, property, value, result.error))
-            {
+            if(!apply_splat_property(
+                splat, rgb, sphericalHarmonics, 
+                property, value, result.error
+            )) {
                 result.cloud.clear();
                 return result;
             }
@@ -85,7 +113,14 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
             -splat.position.y
         );
 
-        finalize_splat_color(splat, rgb, dc, result.cloud.info);
+        finalize_splat_color(splat, rgb, sphericalHarmonics, result.cloud.info);
+
+        result.cloud.sphericalHarmonics.insert(
+            result.cloud.sphericalHarmonics.end(),
+            sphericalHarmonics.begin(),
+            sphericalHarmonics.end()
+        );
+
         grow_bounds(result.cloud, splat.position, result.cloud.splats.empty());
 
         result.cloud.splats.push_back(splat);
@@ -100,75 +135,10 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
 
 namespace
 {
-    SplatCloudInfo make_splat_info(const std::vector<PlyProperty>& properties)
-    {
-        SplatCloudInfo info = {};
-
-        std::array<bool, 3> hasRgb;
-        std::array<bool, 3> hasDc;
-        std::array<bool, 3> hasScale;
-        std::array<bool, 4> hasRotation;
-        
-        bool hasOpacity = false;
-        
-        hasRgb.fill(false);
-        hasDc.fill(false);
-        hasScale.fill(false);
-        hasRotation.fill(false);
-
-        for(const PlyProperty& property : properties)
-        {
-            const std::string& name = property.name;
-
-            hasRgb[0] |= ((name == "red") || (name == "r"));
-            hasRgb[1] |= ((name == "green") || (name == "g"));
-            hasRgb[2] |= ((name == "blue") || (name == "b"));
-            
-            hasDc[0] |= (name == "f_dc_0");
-            hasDc[1] |= (name == "f_dc_1");
-            hasDc[2] |= (name == "f_dc_2");
-            
-            hasScale[0] |= (name == "scale_0");
-            hasScale[1] |= (name == "scale_1");
-            hasScale[2] |= (name == "scale_2");
-            
-            hasRotation[0] |= (name == "rot_0");
-            hasRotation[1] |= (name == "rot_1");
-            hasRotation[2] |= (name == "rot_2");
-            hasRotation[3] |= (name == "rot_3");
-            
-            hasOpacity |= (
-                (name == "opacity") || 
-                (name == "alpha") || 
-                (name == "a")
-            );
-        }
-
-        info.hasRgbColor = true;
-        for(const bool& hasColorComponent : hasRgb)
-            info.hasRgbColor = (info.hasRgbColor && hasColorComponent);
-
-        info.hasDcColor = true;
-        for(const bool& hasDcComponent : hasDc)
-            info.hasDcColor = (info.hasDcColor && hasDcComponent);
-
-        info.hasScale = true;
-        for(const bool& hasScaleComponent : hasScale)
-            info.hasScale = (info.hasScale && hasScaleComponent);
-        
-        info.hasRotation = true;
-        for(const bool& hasRotationComponent : hasRotation)
-            info.hasRotation = (info.hasRotation && hasRotationComponent);
-
-        info.hasOpacity = hasOpacity;
-
-        return info;
-    }
-
     bool apply_splat_property(
         SplatVertex& splat,
         glm::vec3& rgb,
-        glm::vec3& dc,
+        std::vector<glm::vec3>& sphericalHarmonics,
         const PlyProperty& property,
         double value,
         const char*& error
@@ -190,11 +160,16 @@ namespace
             return assign_splat_float(splat.position.z, value, error);
         
         if(name == "f_dc_0")
-            return assign_splat_float(dc.x, value, error);
+            return assign_splat_float(sphericalHarmonics[0].r, value, error);
         if(name == "f_dc_1")
-            return assign_splat_float(dc.y, value, error);
+            return assign_splat_float(sphericalHarmonics[0].g, value, error);
         if(name == "f_dc_2")
-            return assign_splat_float(dc.z, value, error);
+            return assign_splat_float(sphericalHarmonics[0].b, value, error);
+
+        if(name.compare(0, 7, "f_rest_") == 0)
+            return assign_spherical_harmonic(
+                sphericalHarmonics, name, value, error
+            );
 
         if(name == "scale_0")
             return assign_splat_float(splat.logScale.x, value, error);
@@ -232,7 +207,7 @@ namespace
     void finalize_splat_color(
         SplatVertex& splat,
         const glm::vec3& rgb,
-        const glm::vec3& dc,
+        const std::vector<glm::vec3>& sphericalHarmonics,
         const SplatCloudInfo& info
     ) {
         if(info.hasRgbColor)
@@ -245,6 +220,8 @@ namespace
         {
             // 0th order Spherical-harmonic = 1/(2*sqrt(pi)) 
             constexpr float SH0 = 0.28209479177387814f;
+
+            const glm::vec3& dc = sphericalHarmonics[0];
 
             splat.color = glm::vec3(
                 clamp01(0.5f + (SH0 * dc.x)),
@@ -279,6 +256,29 @@ namespace
         destination = static_cast<float>(value);
 
         return true;
+    }
+
+    bool assign_spherical_harmonic(
+        std::vector<glm::vec3>& sphericalHarmonics,
+        const std::string& name,
+        double value,
+        const char*& error
+    ) {
+        uint32_t coefficient = 0;
+        uint32_t component = 0;
+
+        if(!get_ply_spherical_harmonic_location(
+            name, static_cast<uint32_t>(sphericalHarmonics.size()),
+            coefficient, component
+        )) {
+            error = "Invalid spherical harmonic property";
+            return false;
+        }
+
+        return assign_splat_float(
+            sphericalHarmonics[coefficient][component],
+            value, error
+        );
     }
 
     void grow_bounds(SplatCloud& cloud, const glm::vec3& position, bool firstSplat)
