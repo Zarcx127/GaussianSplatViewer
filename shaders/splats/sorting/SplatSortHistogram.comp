@@ -1,0 +1,82 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define ENTRY_KEY_BUFFER_A_ACCESS readonly
+#define ENTRY_KEY_BUFFER_B_ACCESS readonly
+#define SPLAT_COUNTER_BUFFER_ACCESS readonly
+#define RADIX_HISTOGRAM_BUFFER_ACCESS writeonly
+
+#include "SplatHelpers.glsl"
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform SortPushConstants
+{
+    layout(offset = 112) uint digitShift;
+
+    uint keyComponent;
+    uint inputBufferIndex;
+    uint outputBufferIndex;
+}
+sortPushConstants;
+
+shared uint localHistogram[SPLAT_SORT_RADIX_BUCKET_COUNT];
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+    uint workgroupIndex = linear_workgroup_index(
+        gl_WorkGroupID,
+        gl_NumWorkGroups
+    );
+
+    uint workgroupCapacity = (
+        uint(radixHistogramBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    if(workgroupIndex >= workgroupCapacity)
+        return;
+
+    if(localIndex < SPLAT_SORT_RADIX_BUCKET_COUNT)
+        localHistogram[localIndex] = 0;
+
+    barrier();
+
+    uint entryIndex = (
+        (workgroupIndex * SPLAT_SORT_LOCAL_SIZE) +
+        localIndex
+    );
+
+    if(entryIndex < counters.entryCount)
+    {
+        SplatEntryKey key = read_splat_entry_key(
+            entryIndex,
+            sortPushConstants.inputBufferIndex
+        );
+
+       uint bucketIndex = extract_splat_sort_bucket(
+            key,
+            sortPushConstants.keyComponent,
+            sortPushConstants.digitShift
+        );
+
+        atomicAdd(localHistogram[bucketIndex], 1);
+    }
+
+    barrier();
+
+    if(localIndex < SPLAT_SORT_RADIX_BUCKET_COUNT)
+    {
+        uint histogramIndex = (
+            (localIndex * workgroupCapacity) +
+            workgroupIndex
+        );
+
+        radixHistogramBuffer.values[histogramIndex] = 
+            localHistogram[localIndex];
+    }
+}

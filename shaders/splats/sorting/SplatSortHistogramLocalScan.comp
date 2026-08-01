@@ -1,0 +1,71 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define RADIX_HISTOGRAM_BUFFER_ACCESS
+#define RADIX_SCAN_BLOCK_SUM_BUFFER_ACCESS writeonly
+#define SPLAT_SORT_DISPATCH_BUFFER_ACCESS readonly
+#define WORKGROUP_SCAN_LOCAL_SIZE SPLAT_SORT_SCAN_LOCAL_SIZE
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+#include "SplatWorkgroupScan.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+    uint blockIndex = gl_WorkGroupID.x;
+    uint bucketIndex = gl_WorkGroupID.y;
+
+    uint workgroupCapacity = (
+        uint(radixHistogramBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint activeWorkgroupCount = 
+        sortDispatchBuffer.histogramBlocks.valueCount;
+
+    uint scanBlockCapacityPerBucket = (
+        uint(radixScanBlockSumBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint valueIndex = (
+        (blockIndex * SPLAT_SORT_SCAN_LOCAL_SIZE) +
+        localIndex
+    );
+
+    uint histogramIndex = (
+        (bucketIndex * workgroupCapacity) +
+        valueIndex
+    );
+
+    uint value = 0;
+    if(valueIndex < activeWorkgroupCount)
+        value = radixHistogramBuffer.values[histogramIndex];
+
+    scanValues[localIndex] = value;
+
+    barrier();
+
+    workgroup_scan_upsweep();
+    if(localIndex == 0)
+    {
+        uint finalIndex = SPLAT_SORT_SCAN_LOCAL_SIZE - 1;
+        uint blockSumIndex = (
+            (bucketIndex * scanBlockCapacityPerBucket) +
+            blockIndex
+        );
+
+        radixScanBlockSumBuffer.values[blockSumIndex] = scanValues[finalIndex];
+        scanValues[finalIndex] = 0;
+    }
+
+    barrier();
+
+    workgroup_scan_downsweep();
+    if(valueIndex < workgroupCapacity)
+        radixHistogramBuffer.values[histogramIndex] = scanValues[localIndex];
+}

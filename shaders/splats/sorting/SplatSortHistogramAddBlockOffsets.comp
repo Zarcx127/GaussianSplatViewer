@@ -1,23 +1,13 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
-layout(
-    local_size_x = 256,
-    local_size_y = 1,
-    local_size_z = 1
-) in;
+#define RADIX_HISTOGRAM_BUFFER_ACCESS
+#define RADIX_SCAN_BLOCK_SUM_BUFFER_ACCESS
 
-layout(set = 2, binding = 12, std430) buffer RadixHistogramBuffer
-{
-    uint values[];
-}
-radixHistogramBuffer;
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
 
-layout(set = 2, binding = 13, std430) buffer RadixScanBlockSumBuffer
-{
-    uint values[];
-}
-radixScanBlockSumBuffer;
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 layout(push_constant) uniform SortAddOffsetsPushConstants
 {
@@ -29,16 +19,12 @@ layout(push_constant) uniform SortAddOffsetsPushConstants
 }
 sortAddOffsetsPushConstants;
 
-const uint SPLAT_SORT_SCAN_LOCAL_SIZE = 256;
-const uint SPLAT_SORT_RADIX_BUCKET_COUNT = 16;
-
 const uint SPLAT_SORT_TARGET_HISTOGRAMS = 0;
 const uint SPLAT_SORT_TARGET_BLOCK_SUMS = 1;
 
 void main()
 {
     uint bucketIndex = gl_WorkGroupID.y;
-
     uint valueIndex = (
         (gl_WorkGroupID.x * SPLAT_SORT_SCAN_LOCAL_SIZE) +
         gl_LocalInvocationIndex
@@ -47,32 +33,24 @@ void main()
     if(valueIndex >= sortAddOffsetsPushConstants.valueCount)
         return;
 
-    uint blockIndex = (
-        valueIndex /
-        SPLAT_SORT_SCAN_LOCAL_SIZE
-    );
+    uint blockIndex = (valueIndex / SPLAT_SORT_SCAN_LOCAL_SIZE);
 
     uint blockCapacityPerBucket = (
         uint(radixScanBlockSumBuffer.values.length()) /
         SPLAT_SORT_RADIX_BUCKET_COUNT
     );
 
-    uint blockBucketBase = (
-        bucketIndex *
-        blockCapacityPerBucket
+    uint blockBucketBase = (bucketIndex * blockCapacityPerBucket);
+
+    uint blockSumIndex = (
+        blockBucketBase +
+        sortAddOffsetsPushConstants.blockOffset +
+        blockIndex
     );
 
-    uint offsetValue =
-        radixScanBlockSumBuffer.values[
-            blockBucketBase +
-            sortAddOffsetsPushConstants.blockOffset +
-            blockIndex
-        ];
-
-    if(
-        sortAddOffsetsPushConstants.targetBuffer ==
-        SPLAT_SORT_TARGET_HISTOGRAMS
-    ) {
+    uint blockBucketOffset = radixScanBlockSumBuffer.values[blockSumIndex];
+    if(sortAddOffsetsPushConstants.targetBuffer == SPLAT_SORT_TARGET_HISTOGRAMS)
+    {
         uint histogramCapacityPerBucket = (
             uint(radixHistogramBuffer.values.length()) /
             SPLAT_SORT_RADIX_BUCKET_COUNT
@@ -83,8 +61,7 @@ void main()
             valueIndex
         );
 
-        radixHistogramBuffer.values[histogramIndex] +=
-            offsetValue;
+        radixHistogramBuffer.values[histogramIndex] += blockBucketOffset;
     }
     else
     {
@@ -94,7 +71,6 @@ void main()
             valueIndex
         );
 
-        radixScanBlockSumBuffer.values[targetIndex] +=
-            offsetValue;
+        radixScanBlockSumBuffer.values[targetIndex] += blockBucketOffset;
     }
 }

@@ -28,8 +28,6 @@ struct SplatCloudInfo
     bool hasRotation { false };
 
     uint32_t sphericalHarmonicDegree { 0 };
-
-    const char* sourcePath { nullptr };
 };
 
 class SplatCloud
@@ -38,9 +36,6 @@ public:
     std::vector<SplatVertex> splats;
     std::vector<glm::vec3> sphericalHarmonics;
 
-    glm::vec3 boundsMin {};
-    glm::vec3 boundsMax {};
-
     SplatCloudInfo info {};
 
     bool empty() const;
@@ -48,10 +43,6 @@ public:
     uint32_t splat_count() const;
 
     uint32_t spherical_harmonic_coefficient_count() const;
-
-    glm::vec3 center() const;
-
-    glm::vec3 size() const;
 
     void clear();
 };

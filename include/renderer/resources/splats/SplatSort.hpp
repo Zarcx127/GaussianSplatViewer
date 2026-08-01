@@ -16,7 +16,8 @@ constexpr uint32_t SPLAT_SORT_KEY_BIT_COUNT = 32;
 
 constexpr uint32_t SPLAT_SORT_LOCAL_SIZE = 256;
 constexpr uint32_t SPLAT_SORT_SCAN_LOCAL_SIZE = 256;
-constexpr uint32_t SPLAT_SORT_DISPATCH_ROW_CAPACITY = 65535;
+
+constexpr vk::DeviceSize SPLAT_SORT_ENTRY_DISPATCH_OFFSET = 0;
 
 enum class SplatSortKeyComponent : uint32_t
 {
@@ -54,11 +55,26 @@ struct alignas(16) SplatSortAddOffsetsPushConstant
     uint32_t targetBuffer { 0 };
 };
 
+struct alignas(16) GpuSplatSortDispatchCommand
+{
+    uint32_t groupCountX { 0 };
+    uint32_t groupCountY { 1 };
+    uint32_t groupCountZ { 1 };
+    uint32_t valueCount { 0 };
+};
+
+struct GpuSplatSortDispatch
+{
+    GpuSplatSortDispatchCommand entries {};
+    GpuSplatSortDispatchCommand histogramBlocks {};
+};
+
 struct SplatSortResources
 {
     AllocatedBuffer radixHistograms {};
     AllocatedBuffer radixScanBlockSums {};
     AllocatedBuffer radixBucketOffsets {};
+    AllocatedBuffer dispatchCommands {};
 
     uint32_t workgroupCapacity { 0 };
     uint32_t histogramCapacity { 0 };

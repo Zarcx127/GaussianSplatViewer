@@ -17,7 +17,6 @@ public:
     static Logger* get_logger();
 
     void set_mode(bool mode);
-    bool is_enabled();
 
     void print(const char* msg);
 
@@ -26,8 +25,6 @@ public:
     vk::DebugUtilsMessengerEXT make_debug_messenger(
         vk::Instance& instance, std::deque<std::function<void(vk::Instance)>>& deletionQueue
     );
-    
-    void print_list(const char** list, uint32_t count, const char* prefix = "\t");
     
     void print_vector(const std::vector<const char*>& vec, const char* prefix = "\t");
     

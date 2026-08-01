@@ -7,8 +7,6 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "renderer/resources/images/AllocatedImage.hpp"
-
 #include "renderer/resources/splats/SplatFrame.hpp"
 
 #include "renderer/RenderFeatures.hpp"
@@ -24,12 +22,9 @@ struct alignas(16) FramePushConstant
 struct RenderTarget
 {
     vk::Image colorImage;
-    vk::ImageView colorImageView;
     vk::Extent2D extent;
 
     vk::DescriptorSet storageDescriptorSet;
-
-    const AllocatedImage& depthImage;
 };
 
 class FrameCommands
@@ -40,7 +35,6 @@ public:
         const RenderTarget& renderTarget,
         const SplatFrameResources& splatResources,
         vk::DescriptorSet splatFrameDescriptorSet,
-        vk::Pipeline splatGaussianPipeline,
         vk::PipelineLayout pipelineLayout,
         const RenderFeatureFrameInfo& featureInfo
     );
@@ -57,32 +51,13 @@ private:
     const SplatFrameResources* m_splatResources { nullptr };
 
     vk::DescriptorSet m_splatFrameDescriptorSet {};
-    vk::Pipeline m_splatGaussianPipeline {};
     vk::PipelineLayout m_pipelineLayout {};
 
     const RenderFeatureFrameInfo* m_featureInfo { nullptr };
 
     bool is_valid() const;
-
-    void build_rendering_info(
-        vk::RenderingInfoKHR& renderingInfo,
-        vk::RenderingAttachmentInfoKHR& colorAttachment,
-        vk::RenderingAttachmentInfoKHR& depthAttachment
-    ) const;
-
-    void build_color_attachment(
-        vk::RenderingAttachmentInfoKHR& colorAttachment
-    ) const;
-
-    void build_depth_attachment(
-        vk::RenderingAttachmentInfoKHR& depthAttachment
-    ) const;
-
-    void initialize_render_state();
 };
 
-bool render_target_is_valid(
-    const RenderTarget& target
-);
+bool render_target_is_valid(const RenderTarget& target);
 
 #endif

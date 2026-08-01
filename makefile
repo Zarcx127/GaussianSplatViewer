@@ -54,7 +54,8 @@ SHADERS := $(subst \,/,$(SHADERS_RAW))
 OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
 
 SHADER_PATHS := $(patsubst $(SHD_DIR)%,%,$(SHADERS))
-SPVs := $(addprefix $(GPU_DIR),$(addsuffix .spv,$(SHADER_PATHS)))
+SHADER_NAMES := $(subst /,-,$(SHADER_PATHS))
+SPVs := $(addprefix $(GPU_DIR),$(addsuffix .spv,$(SHADER_NAMES)))
 
 OBJ_DEPs := $(OBJs:.o=.d)
 SPV_DEPs := $(addsuffix .d,$(SPVs))
@@ -196,14 +197,6 @@ release:
 
 	@echo $(RELEASE) is ready to export
 
-$(GPU_DIR)%.spv: $(SHD_DIR)% 
-	@if not exist "$(dir $@)" mkdir "$(dir $@)"
-	$(GLSLC) $(FLAGS_SPV) "$<" -o "$@"
-
-$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
-	@if not exist "$(dir $@)" mkdir "$(dir $@)"
-	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
-
 $(EXE): $(SPVs) $(OBJs)
 	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
 
@@ -311,6 +304,16 @@ delete_shader:
 
 	$(call DELETE_FILE,$(EXT),$(SHD_DIR),$(NAME))
 
+.SECONDEXPANSION:
+
+$(GPU_DIR)%.spv: $$(SHD_DIR)$$(subst -,/,$$*)
+	@if not exist "$(dir $@)" mkdir "$(dir $@)"
+	
+	$(GLSLC) $(FLAGS_SPV) "$<" -o "$@"
+
+$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
+	@if not exist "$(dir $@)" mkdir "$(dir $@)"
+	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
 
 CMD_ARGS := $(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS))
 .PHONY: $(CMD_ARGS)

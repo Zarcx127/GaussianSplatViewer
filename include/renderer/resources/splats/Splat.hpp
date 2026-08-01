@@ -22,7 +22,6 @@ struct GpuSplat
 struct SplatBuffer
 {
     AllocatedBuffer buffer {};
-    vk::DeviceSize bufferOffset { 0 };
 
     uint32_t splatCount { 0 };
 

@@ -1,0 +1,28 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define RADIX_BUCKET_OFFSET_BUFFER_ACCESS
+#define WORKGROUP_SCAN_LOCAL_SIZE SPLAT_SORT_RADIX_BUCKET_COUNT
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatWorkgroupScan.glsl"
+
+layout(local_size_x = 16, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+    scanValues[localIndex] = radixBucketOffsetBuffer.values[localIndex];
+
+    barrier();
+
+    workgroup_scan_upsweep();
+    if(localIndex == 0)
+        scanValues[SPLAT_SORT_RADIX_BUCKET_COUNT - 1] = 0;
+
+    barrier();
+
+    workgroup_scan_downsweep();
+    radixBucketOffsetBuffer.values[localIndex] = scanValues[localIndex];
+}

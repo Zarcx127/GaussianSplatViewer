@@ -1,0 +1,120 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define ENTRY_SPLAT_INDEX_BUFFER_A_ACCESS readonly
+#define SPLAT_COUNTER_BUFFER_ACCESS
+#define SPLAT_ENTRY_RANGE_BUFFER_ACCESS readonly
+#define SPLAT_SORT_DISPATCH_BUFFER_ACCESS
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+const uint SPLAT_SORT_DISPATCH_ROW_CAPACITY = 65535;
+
+void write_entry_dispatch(uint sortWorkgroupCount);
+void write_histogram_dispatch(uint sortWorkgroupCount);
+void write_sort_dispatches(uint entryCount);
+
+uint divide_round_up(uint value, uint divisor);
+
+void main()
+{
+    if(counters.visibleCount == 0)
+    {
+        counters.entryCount = 0;
+        counters.requestedEntryCount = 0;
+        counters.overflowCount = 0;
+        write_sort_dispatches(0);
+
+        return;
+    }
+
+    SplatEntryRange finalRange =
+        splatEntryRangeBuffer.ranges[counters.visibleCount - 1];
+
+    uint requestedEntryCount = (
+        finalRange.entryOffset +
+        finalRange.entryCount
+    );
+
+    uint entryCapacity = uint(
+        entrySplatIndexBufferA.indices.length()
+    );
+
+    uint validEntryCount = min(
+        requestedEntryCount,
+        entryCapacity
+    );
+
+    counters.entryCount = validEntryCount;
+    counters.requestedEntryCount = requestedEntryCount;
+    counters.overflowCount = (requestedEntryCount - validEntryCount);
+
+    write_sort_dispatches(validEntryCount);
+}
+
+void write_entry_dispatch(uint sortWorkgroupCount) 
+{
+    if(sortWorkgroupCount == 0)
+    {
+        sortDispatchBuffer.entries.groupCountX = 0;
+        sortDispatchBuffer.entries.groupCountY = 1;
+        sortDispatchBuffer.entries.groupCountZ = 1;
+        sortDispatchBuffer.entries.valueCount = 0;
+
+        return;
+    }
+
+    uint groupCountX = min(
+        sortWorkgroupCount,
+        SPLAT_SORT_DISPATCH_ROW_CAPACITY
+    );
+
+    uint groupCountY = divide_round_up(
+        sortWorkgroupCount,
+        groupCountX
+    );
+
+    sortDispatchBuffer.entries.groupCountX = groupCountX;
+    sortDispatchBuffer.entries.groupCountY = groupCountY;
+    sortDispatchBuffer.entries.groupCountZ = 1;
+    sortDispatchBuffer.entries.valueCount = sortWorkgroupCount;
+}
+
+void write_histogram_dispatch(uint sortWorkgroupCount) 
+{
+    uint histogramBlockCount = divide_round_up(
+        sortWorkgroupCount, 
+        SPLAT_SORT_SCAN_LOCAL_SIZE
+    );
+
+    sortDispatchBuffer.histogramBlocks.groupCountX = histogramBlockCount;
+    sortDispatchBuffer.histogramBlocks.groupCountY = SPLAT_SORT_RADIX_BUCKET_COUNT;
+    sortDispatchBuffer.histogramBlocks.groupCountZ = 1;
+    sortDispatchBuffer.histogramBlocks.valueCount = sortWorkgroupCount;
+}
+
+void write_sort_dispatches(uint entryCount) 
+{
+    uint sortWorkgroupCount = divide_round_up(
+        entryCount,
+        SPLAT_SORT_LOCAL_SIZE
+    );
+
+    write_entry_dispatch(sortWorkgroupCount);
+    write_histogram_dispatch(sortWorkgroupCount);
+}
+
+uint divide_round_up(uint value, uint divisor) 
+{
+    if(divisor == 0)
+        return 0;
+
+    return (
+        (value / divisor) +
+        uint((value % divisor) != 0)
+    );
+}

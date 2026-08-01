@@ -11,11 +11,7 @@
 
 #include "assets/splats/SplatCloud.hpp"
 
-#include "renderer/resources/pipeline/GraphicsPipelineConfig.hpp"
-
 #include "renderer/resources/splats/Splat.hpp"
-
-GraphicsPipelineConfig get_splat_gaussian_pipeline_config();
 
 SplatBuffer build_splat_buffer(
     const SplatCloud& cloud,

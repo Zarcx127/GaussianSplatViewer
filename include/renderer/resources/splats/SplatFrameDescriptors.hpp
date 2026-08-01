@@ -29,6 +29,7 @@ enum class SplatFrameBinding : uint32_t
     SortRadixHistograms,
     SortRadixScanBlockSums,
     SortRadixBucketOffsets,
+    SortDispatchCommands,
     Count
 };
 

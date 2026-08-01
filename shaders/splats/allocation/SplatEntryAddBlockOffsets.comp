@@ -1,30 +1,14 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 
+#define SPLAT_COUNTER_BUFFER_ACCESS readonly
+#define SPLAT_ENTRY_RANGE_BUFFER_ACCESS
+#define ENTRY_SCAN_BLOCK_SUM_BUFFER_ACCESS readonly
+
+#include "ShaderBindings.glsl"
 #include "SplatStructures.glsl"
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
-
-layout(set = 2, binding = 7, std430) readonly buffer SplatCounterBuffer
-{
-    uint visibleCount;
-    uint entryCount;
-    uint requestedEntryCount;
-    uint overflowCount;
-}
-counters;
-
-layout(set = 2, binding = 10, std430) buffer SplatEntryRangeBuffer
-{
-    SplatEntryRange ranges[];
-}
-splatEntryRangeBuffer;
-
-layout(set = 2, binding = 11, std430) readonly buffer EntryScanBlockSumBuffer
-{
-    uint values[];
-}
-entryScanBlockSumBuffer;
 
 void main()
 {

@@ -1,0 +1,48 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define SPLAT_COUNTER_BUFFER_ACCESS readonly
+#define SPLAT_ENTRY_RANGE_BUFFER_ACCESS
+#define ENTRY_SCAN_BLOCK_SUM_BUFFER_ACCESS writeonly
+#define WORKGROUP_SCAN_LOCAL_SIZE SPLAT_ENTRY_SCAN_LOCAL_SIZE
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+#include "SplatWorkgroupScan.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+    uint entryIndex = gl_GlobalInvocationID.x;
+
+    scanValues[localIndex] = (
+        (entryIndex < counters.visibleCount) 
+            ? splatEntryRangeBuffer.ranges[entryIndex].entryCount 
+            : 0
+    );
+
+    barrier();
+
+    workgroup_scan_upsweep();
+
+    if(localIndex == 0)
+    {
+        uint finalIndex = SPLAT_ENTRY_SCAN_LOCAL_SIZE - 1;
+
+        entryScanBlockSumBuffer.values[gl_WorkGroupID.x] = scanValues[finalIndex];
+        scanValues[finalIndex] = 0;
+    }
+
+    barrier();
+
+    workgroup_scan_downsweep();
+
+    if(entryIndex < counters.visibleCount)
+    {
+        splatEntryRangeBuffer.ranges[entryIndex].entryOffset = 
+            scanValues[localIndex];
+    }
+}

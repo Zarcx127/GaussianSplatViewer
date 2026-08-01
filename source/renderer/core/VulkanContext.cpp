@@ -125,11 +125,6 @@ void VulkanContext::destroy()
     m_instance = vk::Instance();
 }
 
-vk::Instance VulkanContext::instance() const
-{
-    return m_instance;
-}
-
 vk::PhysicalDevice VulkanContext::physical_device() const
 {
     return m_physicalDevice;
@@ -153,11 +148,6 @@ VmaAllocator VulkanContext::allocator() const
 vk::SurfaceKHR VulkanContext::surface() const
 {
     return m_surface;
-}
-
-uint32_t VulkanContext::graphics_queue_family_index() const
-{
-    return m_graphicsQueueFamilyIndex;
 }
 
 vk::Queue VulkanContext::graphics_queue() const

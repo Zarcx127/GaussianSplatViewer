@@ -8,7 +8,6 @@
 
 #include "renderer/passes/SplatPreprocessPass.hpp"
 #include "renderer/passes/BackgroundPass.hpp"
-#include "renderer/passes/SplatGaussianPass.hpp"
 #include "renderer/passes/SplatTilePass.hpp"
 #include "renderer/passes/SplatEntryScanPass.hpp"
 #include "renderer/passes/SplatSortPass.hpp"
@@ -20,7 +19,6 @@ FrameCommands::FrameCommands(
     const RenderTarget& renderTarget,
     const SplatFrameResources& splatResources,
     vk::DescriptorSet splatFrameDescriptorSet,
-    vk::Pipeline splatGaussianPipeline,
     vk::PipelineLayout pipelineLayout,
     const RenderFeatureFrameInfo& featureInfo
 ) {
@@ -28,7 +26,6 @@ FrameCommands::FrameCommands(
     m_renderTarget = &renderTarget;
     m_splatResources = &splatResources;
     m_splatFrameDescriptorSet = splatFrameDescriptorSet;
-    m_splatGaussianPipeline = splatGaussianPipeline;
     m_pipelineLayout = pipelineLayout;
     m_featureInfo = &featureInfo;
 }
@@ -73,10 +70,7 @@ bool FrameCommands::record(
 
     m_commandBuffer.pushConstants(
         m_pipelineLayout,
-        (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex 
-        ),
+        vk::ShaderStageFlagBits::eCompute,
         0,
         sizeof(FramePushConstant),
         &pushConstants
@@ -115,7 +109,6 @@ bool FrameCommands::record(
         *m_splatResources
     );
 
-// FLAG //
     uint32_t sortedBufferIndex = record_splat_sort_pass(
         m_commandBuffer,
         m_featureInfo->pipelines.splatSort,
@@ -123,7 +116,6 @@ bool FrameCommands::record(
         m_splatFrameDescriptorSet,
         *m_splatResources
     );
-/////
 
     record_splat_tile_range_pass(
         m_commandBuffer,
@@ -232,7 +224,6 @@ bool FrameCommands::is_valid() const
         m_renderTarget &&
         m_splatResources &&
         m_splatFrameDescriptorSet &&
-        m_splatGaussianPipeline &&
         m_pipelineLayout &&
         m_featureInfo &&
         splat_frame_resources_are_valid(*m_splatResources) &&
@@ -241,69 +232,12 @@ bool FrameCommands::is_valid() const
     );
 }
 
-void FrameCommands::build_rendering_info(
-    vk::RenderingInfoKHR& renderingInfo,
-    vk::RenderingAttachmentInfoKHR& colorAttachment,
-    vk::RenderingAttachmentInfoKHR& depthAttachment
-) const {
-    renderingInfo.flags = vk::RenderingFlagsKHR();
-    renderingInfo.renderArea = vk::Rect2D({0, 0}, m_renderTarget->extent);
-    renderingInfo.viewMask = 0;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &colorAttachment;
-    renderingInfo.pDepthAttachment = &depthAttachment;
-    renderingInfo.pStencilAttachment = nullptr;
-}
-
-void FrameCommands::build_color_attachment(
-    vk::RenderingAttachmentInfoKHR& colorAttachment
-) const {
-    colorAttachment.imageView = m_renderTarget->colorImageView;
-    colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-    colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-    colorAttachment.clearValue = vk::ClearValue({0.0f, 0.0f, 0.0f, 1.0f});
-}
-
-void FrameCommands::build_depth_attachment(
-    vk::RenderingAttachmentInfoKHR& depthAttachment
-) const {
-    vk::ClearValue clearValue = {};
-    clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-    depthAttachment.imageView = m_renderTarget->depthImage.imageView;
-    depthAttachment.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
-    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-    depthAttachment.clearValue = clearValue;
-}
-
-void FrameCommands::initialize_render_state() 
+bool render_target_is_valid(const RenderTarget& target) 
 {
-    vk::Viewport viewport = vk::Viewport(
-        0.0f, 
-        0.0f, 
-        static_cast<float>(m_renderTarget->extent.width), 
-        static_cast<float>(m_renderTarget->extent.height), 
-        0.0f, 
-        1.0f
-    );
-
-    vk::Rect2D scissor = vk::Rect2D({0, 0}, m_renderTarget->extent);
-
-    m_commandBuffer.setViewport(0, 1, &viewport);
-    m_commandBuffer.setScissor(0, 1, &scissor);
-}
-
-bool render_target_is_valid(
-    const RenderTarget& target
-) {
     return (
         target.colorImage &&
-        target.colorImageView &&
         target.storageDescriptorSet &&
-        target.depthImage.image &&
-        target.depthImage.imageView 
+        (target.extent.width > 0) &&
+        (target.extent.height > 0)
     );
 }

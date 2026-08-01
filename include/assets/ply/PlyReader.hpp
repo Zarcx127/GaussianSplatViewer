@@ -40,7 +40,6 @@ public:
         const char*& error
     );
 
-    PlyFormat format() const;
     uint64_t vertex_count() const;
 
     const std::vector<PlyProperty>& vertex_properties() const;

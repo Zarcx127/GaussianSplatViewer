@@ -40,8 +40,6 @@ namespace
         const char*& error
     );
 
-    void grow_bounds(SplatCloud& cloud, const glm::vec3& position, bool firstSplat);
-
     float clamp01(float value);
     float sigmoid(double value);
 }
@@ -69,11 +67,38 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
     }
 
     inspect_ply_splat_properties(
-        reader.vertex_properties(), result.cloud.info
+        reader.vertex_properties(), 
+        result.cloud.info
     );
 
     result.cloud.info.hasDcColor= sphericalHarmonicLayout.hasDc;
     result.cloud.info.sphericalHarmonicDegree = sphericalHarmonicLayout.degree;
+
+    if(
+        !result.cloud.info.hasRgbColor &&
+        !result.cloud.info.hasDcColor
+    ) {
+        result.error = "PLY splat data is missing color";
+        return result;
+    }
+
+    if(!result.cloud.info.hasOpacity)
+    {
+        result.error = "PLY splat data is missing opacity";
+        return result;
+    }
+
+    if(!result.cloud.info.hasScale)
+    {
+        result.error = "PLY splat data is missing scale";
+        return result;
+    }
+
+    if(!result.cloud.info.hasRotation)
+    {
+        result.error = "PLY splat data is missing rotation";
+        return result;
+    }
 
     uint32_t sphericalCoefficientCount = sphericalHarmonicLayout.coefficientCount;
 
@@ -121,12 +146,9 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
             sphericalHarmonics.end()
         );
 
-        grow_bounds(result.cloud, splat.position, result.cloud.splats.empty());
-
         result.cloud.splats.push_back(splat);
     }
 
-    result.cloud.info.sourcePath = path;
     result.success = true;
     result.error = nullptr;
 
@@ -272,25 +294,6 @@ namespace
             sphericalHarmonics[coefficient][component],
             value, error
         );
-    }
-
-    void grow_bounds(SplatCloud& cloud, const glm::vec3& position, bool firstSplat)
-    {
-        if(firstSplat)
-        {
-            cloud.boundsMin = position;
-            cloud.boundsMax = position;
-            
-            return;
-        }
-
-        cloud.boundsMin.x = std::min(cloud.boundsMin.x, position.x);
-        cloud.boundsMin.y = std::min(cloud.boundsMin.y, position.y);
-        cloud.boundsMin.z = std::min(cloud.boundsMin.z, position.z);
-    
-        cloud.boundsMax.x = std::max(cloud.boundsMax.x, position.x);
-        cloud.boundsMax.y = std::max(cloud.boundsMax.y, position.y);
-        cloud.boundsMax.z = std::max(cloud.boundsMax.z, position.z);
     }
 
     float clamp01(float value)

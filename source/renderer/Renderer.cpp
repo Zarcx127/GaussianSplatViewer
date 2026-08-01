@@ -173,10 +173,7 @@ bool Engine::init(uint32_t width, uint32_t height)
     );
 
     sphericalHarmonicLayoutBuilder.add_entry(
-        (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex
-        ),
+        vk::ShaderStageFlagBits::eCompute,
         vk::DescriptorType::eStorageBuffer
     );
 
@@ -205,12 +202,6 @@ bool Engine::init(uint32_t width, uint32_t height)
     }
 
     m_renderInterface.add_descriptor_set_layout(m_splatFrameDescriptorSetLayout);
-
-    m_renderInterface.add_push_constant_range(
-        vk::ShaderStageFlagBits::eVertex,
-        0U, 
-        sizeof(FramePushConstant)
-    );
 
     m_renderInterface.add_push_constant_range(
         vk::ShaderStageFlagBits::eCompute,
@@ -390,7 +381,6 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     if(
         (imageIndex >= m_renderResources.color_image_count()) ||
-        (imageIndex >= m_renderResources.color_image_view_count()) ||
         (imageIndex >= m_renderResources.image_in_flight_count()) ||
         (imageIndex >= m_renderResources.swapchain_storage_descriptor_set_count())
     ) {
@@ -421,23 +411,20 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
     
     RenderTarget renderTarget = {
         m_renderResources.color_image(imageIndex),
-        m_renderResources.color_image_view(imageIndex),
         renderExtent,
-        m_renderResources.swapchain_storage_descriptor_set(imageIndex),
-        m_renderResources.depth_image()
+        m_renderResources.swapchain_storage_descriptor_set(imageIndex)
     };
 
-    FrameCommands FrameCommands(
+    FrameCommands frameCommands(
         frame.commandBuffer,
         renderTarget,
         frame.splatResources,
         frame.splatFrameDescriptorSet,
-        m_renderResources.splat_gaussian_pipeline(),
         m_pipelineLayout,
         featureInfo
     );
 
-    if(!FrameCommands.record(pushConstants))
+    if(!frameCommands.record(pushConstants))
         return DrawResult::FatalError;
     
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eComputeShader;

@@ -120,19 +120,33 @@ void record_splat_entry_scan_pass(
 
     commandBuffer.dispatch(1, 1, 1);
 
-    vk::BufferMemoryBarrier finalizeBarrier = make_buffer_memory_barrier(
-        resources.counters.buffer,
-        resources.counters.size,
-        vk::AccessFlagBits::eShaderWrite,
-        vk::AccessFlagBits::eShaderRead
-    );
+    std::array<vk::BufferMemoryBarrier, 2> finalizeBarriers = {
+        make_buffer_memory_barrier(
+            resources.counters.buffer,
+            resources.counters.size,
+            vk::AccessFlagBits::eShaderWrite,
+            vk::AccessFlagBits::eShaderRead
+        ),
+        make_buffer_memory_barrier(
+            resources.sort.dispatchCommands.buffer,
+            resources.sort.dispatchCommands.size,
+            vk::AccessFlagBits::eShaderWrite,
+            (
+                vk::AccessFlagBits::eIndirectCommandRead |
+                vk::AccessFlagBits::eShaderRead
+            )
+        )
+    };
 
     commandBuffer.pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
+        (
+            vk::PipelineStageFlagBits::eComputeShader |
+            vk::PipelineStageFlagBits::eDrawIndirect
+        ),
         vk::DependencyFlags(),
         nullptr,
-        finalizeBarrier,
+        finalizeBarriers,
         nullptr
     );
 }

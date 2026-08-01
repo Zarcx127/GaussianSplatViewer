@@ -1,0 +1,208 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define ENTRY_KEY_BUFFER_A_ACCESS
+#define ENTRY_KEY_BUFFER_B_ACCESS
+#define ENTRY_SPLAT_INDEX_BUFFER_A_ACCESS
+#define ENTRY_SPLAT_INDEX_BUFFER_B_ACCESS
+#define SPLAT_COUNTER_BUFFER_ACCESS readonly
+#define RADIX_HISTOGRAM_BUFFER_ACCESS readonly
+#define RADIX_BUCKET_OFFSET_BUFFER_ACCESS readonly
+#define WORKGROUP_SCAN_LOCAL_SIZE SPLAT_SORT_LOCAL_SIZE
+
+#include "SplatHelpers.glsl"
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+#include "SplatWorkgroupScan.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform SortPushConstants
+{
+    layout(offset = 112) uint digitShift;
+
+    uint keyComponent;
+    uint inputBufferIndex;
+    uint outputBufferIndex;
+}
+sortPushConstants;
+
+shared uint localBuckets[SPLAT_SORT_LOCAL_SIZE];
+shared uint localBucketCounts[SPLAT_SORT_RADIX_BUCKET_COUNT];
+shared uint localOrder[2][SPLAT_SORT_LOCAL_SIZE];
+shared uint oneCount;
+
+void write_entry(
+    uint entryIndex,
+    SplatEntryKey key,
+    uint splatIndex
+);
+
+void stable_partition(
+    uint sourceOrderIndex,
+    uint destinationOrderIndex,
+    uint bitIndex
+);
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+
+    uint workgroupIndex = linear_workgroup_index(
+        gl_WorkGroupID,
+        gl_NumWorkGroups
+    );
+
+    uint workgroupCapacity = (
+        uint(radixHistogramBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    if(workgroupIndex >= workgroupCapacity)
+        return;
+
+    uint firstEntry = (workgroupIndex * SPLAT_SORT_LOCAL_SIZE);
+    
+    uint validEntryCount = 0;
+    if(firstEntry < counters.entryCount)
+    {
+        validEntryCount = min(
+            SPLAT_SORT_LOCAL_SIZE,
+            counters.entryCount - firstEntry
+        );
+    }
+
+    if(localIndex < SPLAT_SORT_RADIX_BUCKET_COUNT)
+        localBucketCounts[localIndex] = 0;
+
+    localOrder[0][localIndex] = localIndex;
+
+    barrier();
+
+    if(localIndex < validEntryCount)
+    {
+        SplatEntryKey key = read_splat_entry_key(
+            (firstEntry + localIndex),
+            sortPushConstants.inputBufferIndex
+        );
+
+        uint bucketIndex = extract_splat_sort_bucket(
+            key,
+            sortPushConstants.keyComponent,
+            sortPushConstants.digitShift
+        );
+
+        localBuckets[localIndex] = bucketIndex;
+
+        atomicAdd(localBucketCounts[bucketIndex], 1);
+    }
+    else
+    {
+        localBuckets[localIndex] = (SPLAT_SORT_RADIX_BUCKET_COUNT - 1);
+    }
+
+    barrier();
+
+    stable_partition(0, 1, 0);
+    stable_partition(1, 0, 1);
+    stable_partition(0, 1, 2);
+    stable_partition(1, 0, 3);
+
+    uint originalLocalIndex = localOrder[0][localIndex];
+
+    if(originalLocalIndex >= validEntryCount)
+        return;
+
+    uint inputEntryIndex = (firstEntry + originalLocalIndex);
+
+    SplatEntryKey key = read_splat_entry_key(
+        inputEntryIndex,
+        sortPushConstants.inputBufferIndex
+    );
+
+    uint splatIndex = read_entry_splat_index(
+        inputEntryIndex,
+        sortPushConstants.inputBufferIndex
+    );
+
+    uint bucketIndex = localBuckets[originalLocalIndex];
+
+    uint localBucketOffset = 0;
+    for(uint precedingBucket = 0; precedingBucket < bucketIndex; precedingBucket++) 
+        localBucketOffset += localBucketCounts[precedingBucket];
+
+    uint localRank = (localIndex - localBucketOffset);
+
+    uint histogramIndex = (
+        (bucketIndex * workgroupCapacity) +
+        workgroupIndex
+    );
+
+    uint outputEntryIndex = (
+        radixBucketOffsetBuffer.values[bucketIndex] +
+        radixHistogramBuffer.values[histogramIndex] +
+        localRank
+    );
+
+    write_entry(outputEntryIndex, key, splatIndex);
+}
+
+
+void write_entry(
+    uint entryIndex,
+    SplatEntryKey key,
+    uint splatIndex
+) {
+    if(sortPushConstants.outputBufferIndex == 0)
+    {
+        entryKeyBufferA.keys[entryIndex] = key;
+        entrySplatIndexBufferA.indices[entryIndex] = splatIndex;
+
+        return;
+    }
+
+    entryKeyBufferB.keys[entryIndex] = key;
+    entrySplatIndexBufferB.indices[entryIndex] = splatIndex;
+}
+
+void stable_partition(
+    uint sourceOrderIndex,
+    uint destinationOrderIndex,
+    uint bitIndex
+) {
+    uint localIndex = gl_LocalInvocationIndex;
+    uint originalLocalIndex = localOrder[sourceOrderIndex][localIndex];
+
+    uint bitValue = ((localBuckets[originalLocalIndex] >> bitIndex) & 1U);
+
+    scanValues[localIndex] = bitValue;
+
+    barrier();
+
+    workgroup_scan_upsweep();
+    if(localIndex == 0)
+    {
+        uint finalIndex = (SPLAT_SORT_LOCAL_SIZE - 1);
+
+        oneCount = scanValues[finalIndex];
+        scanValues[finalIndex] = 0;
+    }
+
+    barrier();
+
+    workgroup_scan_downsweep();
+
+    uint onePrefix = scanValues[localIndex];
+    uint zeroCount = SPLAT_SORT_LOCAL_SIZE - oneCount;
+
+    uint destinationIndex = (
+        (bitValue == 0)
+            ? localIndex - onePrefix
+            : zeroCount + onePrefix
+    );
+
+    localOrder[destinationOrderIndex][destinationIndex] = originalLocalIndex;
+
+    barrier();
+}

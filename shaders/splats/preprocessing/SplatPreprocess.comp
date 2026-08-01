@@ -1,0 +1,489 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define SPHERICAL_HARMONIC_BUFFER_ACCESS readonly
+#define SPLAT_DATA_BUFFER_ACCESS readonly
+#define PROJECTED_SPLAT_BUFFER_ACCESS writeonly
+#define VISIBLE_SPLAT_INDEX_BUFFER_ACCESS writeonly
+#define SPLAT_COUNTER_BUFFER_ACCESS
+#define SPLAT_DRAW_COMMAND_BUFFER_ACCESS
+#define SPLAT_ENTRY_RANGE_BUFFER_ACCESS writeonly
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants
+{
+    mat4 view;
+    vec4 cameraPosition;
+    vec4 projectionInfo;
+    uvec4 renderInfo;
+}
+pushConstants;
+
+const uint MAX_SUPPORTED_SH_DEGREE = 3;
+
+const float SH0 = 0.28209479177387814;
+const float SH1 = 0.4886025119029199;
+
+const float SH2[5] = float[5](
+     1.0925484305920792,
+    -1.0925484305920792,
+     0.31539156525252005,
+    -1.0925484305920792,
+     0.5462742152960396
+);
+
+const float SH3[7] = float[7](
+    -0.5900435899266435,
+     2.890611442640554,
+    -0.4570457994644658,
+     0.3731763325901154,
+    -0.4570457994644658,
+     1.445305721320277,
+    -0.5900435899266435
+);
+
+const mat3 PLY_TO_ENGINE = mat3(
+    vec3(1.0, 0.0,  0.0),
+    vec3(0.0, 0.0, -1.0),
+    vec3(0.0, 1.0,  0.0)
+);
+
+bool project_splat(
+    uint splatIndex,
+    out ProjectedSplat projected
+);
+
+vec3 evaluate_color(uint splatIndex, Splat splat);
+
+vec3 evaluate_spherical_harmonics(
+    uint splatIndex, 
+    uint degree, 
+    vec3 direction
+);
+
+vec3 spherical_harmonic(uint splatIndex, uint coefficient);
+
+mat3 quaternion_matrix(vec4 quaternion);
+
+uvec4 compute_tile_bounds(
+    vec2 centerNdc,
+    vec2 extentPixels,
+    vec2 viewport
+);
+
+
+void main()
+{
+    uint splatIndex = gl_GlobalInvocationID.x;
+    if(splatIndex >= splatBuffer.splats.length())
+        return;
+
+    ProjectedSplat projected;
+    if(!project_splat(splatIndex, projected))
+        return;
+
+    projectedSplatBuffer.splats[splatIndex] = projected;
+
+    uint visibleIndex = atomicAdd(counters.visibleCount, 1);
+    visibleSplatIndexBuffer.indices[visibleIndex] = splatIndex;
+
+    uvec2 tileSpan = (
+        projected.tileBounds.zw -
+        projected.tileBounds.xy +
+        uvec2(1)
+    );
+
+    splatEntryRangeBuffer.ranges[visibleIndex].entryCount = (
+        tileSpan.x * tileSpan.y
+    );
+
+    splatEntryRangeBuffer.ranges[visibleIndex].entryOffset = 0;
+
+    atomicAdd(drawCommand.instanceCount, 1);
+}
+
+bool project_splat(
+    uint splatIndex,
+    out ProjectedSplat projected
+) {
+    Splat splat = splatBuffer.splats[splatIndex];
+
+    vec4 viewCenter = (
+        pushConstants.view *
+        vec4(splat.position.xyz, 1.0)
+    );
+
+    float depth = -viewCenter.z;
+    if(depth <= 0.0)
+        return false;
+
+    vec3 scale = exp(splat.logScale.xyz);
+    mat3 rotation = (PLY_TO_ENGINE * quaternion_matrix(splat.rotation));
+
+    mat3 scaleSquared = mat3(
+        vec3(
+            (scale.x * scale.x),
+            0.0,
+            0.0
+        ),
+        vec3(
+            0.0,
+            (scale.y * scale.y),
+            0.0
+        ),
+        vec3(
+            0.0,
+            0.0,
+            (scale.z * scale.z)
+        )
+    );
+
+    mat3 worldCovariance = (rotation * scaleSquared * transpose(rotation));
+    mat3 viewRotation = mat3(pushConstants.view);
+    mat3 viewCovariance = (
+        viewRotation *
+        worldCovariance *
+        transpose(viewRotation)
+    );
+
+    vec4 clipCenter = vec4(
+        (pushConstants.projectionInfo.x * viewCenter.x),
+        (pushConstants.projectionInfo.y * viewCenter.y),
+        (
+            (pushConstants.projectionInfo.z * viewCenter.z) +
+            pushConstants.projectionInfo.w
+        ),
+        -viewCenter.z
+    );
+
+    if(
+        (clipCenter.w <= 0.0) ||
+        (clipCenter.z < 0.0) ||
+        (clipCenter.z > clipCenter.w)
+    ) {
+        return false;
+    }
+
+    vec2 viewport = vec2(pushConstants.renderInfo.xy);
+
+    float focalX = (0.5 * viewport.x * pushConstants.projectionInfo.x);
+    float focalY = (0.5 * viewport.y * pushConstants.projectionInfo.y);
+
+    float inverseDepth = (1.0 / depth);
+    float inverseDepthSquared = (inverseDepth * inverseDepth);
+
+    float tangentLimitX = (1.3 / abs(pushConstants.projectionInfo.x));
+    float tangentLimitY = (1.3 / abs(pushConstants.projectionInfo.y));
+
+    float clampedViewX = clamp(
+        (viewCenter.x * inverseDepth),
+        -tangentLimitX,
+        tangentLimitX
+    );
+
+    float clampViewY = clamp(
+        viewCenter.y * inverseDepth,
+        -tangentLimitY,
+        tangentLimitY
+    );
+
+    float covarianceViewX = (clampedViewX * depth);
+    float covarianceViewY = (clampViewY * depth);
+
+    vec3 horizontalDerivative = vec3(
+        (focalX * inverseDepth),
+        0.0,
+        (focalX * covarianceViewX * inverseDepthSquared)
+    );
+
+    vec3 verticalDerivative = vec3(
+        0.0,
+        (focalY * inverseDepth),
+        (focalY * covarianceViewY * inverseDepthSquared)
+    );
+
+    float covarianceXX = (
+        dot(
+            horizontalDerivative, 
+            (viewCovariance * horizontalDerivative)
+        ) + 0.3
+    );
+
+    float covarianceXY = dot(
+        horizontalDerivative,
+        (viewCovariance * verticalDerivative)
+    );
+
+    float covarianceYY = (
+        dot(
+            verticalDerivative,
+            (viewCovariance * verticalDerivative)
+        ) + 0.3
+    );
+
+    float covarianceDeterminant = (
+        (covarianceXX * covarianceYY) -
+        (covarianceXY * covarianceXY)
+    );
+
+    if(covarianceDeterminant <= 0.0)
+        return false;
+
+    float inverseCovarianceDeterminant = (1.0 / covarianceDeterminant);
+
+    vec3 conic = vec3(
+        (covarianceYY * inverseCovarianceDeterminant),
+        (-covarianceXY * inverseCovarianceDeterminant),
+        (covarianceXX * inverseCovarianceDeterminant)
+    );
+
+    float traceHalf = (0.5 * (covarianceXX + covarianceYY));
+    vec2 eigenComponents = vec2(
+        (0.5 * (covarianceXX - covarianceYY)),
+        covarianceXY
+    );
+
+    float largestEigenvalue = (traceHalf + length(eigenComponents));
+
+    float maximumRadius = (
+        SIGMA_EXTENT *
+        sqrt(max(largestEigenvalue, 0.0))
+    );
+
+    if(maximumRadius < 0.5)
+        return false;
+
+    vec2 centerNdc = (clipCenter.xy / clipCenter.w);
+
+    vec2 extentPixels = (
+        SIGMA_EXTENT *
+        sqrt(
+            max(
+                vec2(covarianceXX, covarianceYY),
+                vec2(0.0)
+            )
+        )
+    );
+
+    vec2 extentNdc = (extentPixels * (2.0 / viewport));
+    
+    if(
+        ((centerNdc.x + extentNdc.x) < -1.0) ||
+        ((centerNdc.x - extentNdc.x) > 1.0) ||
+        ((centerNdc.y + extentNdc.y) < -1.0) ||
+        ((centerNdc.y - extentNdc.y) > 1.0)
+    ) {
+        return false;
+    }
+
+    projected.clipCenter = clipCenter;
+    projected.conicOpacity = vec4(
+        conic,
+        splat.color.a
+    );
+
+    projected.color = vec4(
+        evaluate_color(splatIndex, splat),
+        splat.color.a
+    );
+
+    projected.tileBounds = compute_tile_bounds(
+        centerNdc,
+        extentPixels,
+        viewport
+    );
+
+    return true;
+}
+
+vec3 evaluate_color(uint splatIndex, Splat splat) 
+{
+    if(pushConstants.renderInfo.w == 0)
+        return splat.color.rgb;
+
+    vec3 direction = (
+        splat.position.xyz -
+        pushConstants.cameraPosition.xyz
+    );
+
+    float lengthSquared = dot(direction, direction);
+    if(lengthSquared <= 0.0)
+        return splat.color.rgb;
+
+    direction *= inversesqrt(lengthSquared);
+    direction = transpose(PLY_TO_ENGINE) * direction;
+
+    uint degree = min(
+        pushConstants.renderInfo.z,
+        MAX_SUPPORTED_SH_DEGREE
+    );
+
+    return evaluate_spherical_harmonics(
+        splatIndex,
+        degree,
+        direction
+    );
+}
+
+vec3 evaluate_spherical_harmonics(
+    uint splatIndex,
+    uint degree,
+    vec3 direction
+) {
+    float x = direction.x;
+    float y = direction.y;
+    float z = direction.z;
+
+    float xx = (x * x);
+    float yy = (y * y);
+    float zz = (z * z);
+
+    float xy = (x * y);
+    float yz = (y * z);
+    float xz = (x * z);
+
+    vec3 sh0 = spherical_harmonic(splatIndex, 0);
+    vec3 result = (SH0 * sh0);
+
+    if(degree > 0)
+    {
+        vec3 sh1 = spherical_harmonic(splatIndex, 1);
+        vec3 sh2 = spherical_harmonic(splatIndex, 2);
+        vec3 sh3 = spherical_harmonic(splatIndex, 3);
+
+        result += (
+            (-SH1 * y * sh1) +
+            (SH1 * z * sh2) +
+            (-SH1 * x * sh3)
+        );
+    }
+
+    if(degree > 1)
+    {
+        vec3 sh4 = spherical_harmonic(splatIndex, 4);
+        vec3 sh5 = spherical_harmonic(splatIndex, 5);
+        vec3 sh6 = spherical_harmonic(splatIndex, 6);
+        vec3 sh7 = spherical_harmonic(splatIndex, 7);
+        vec3 sh8 = spherical_harmonic(splatIndex, 8);
+
+        result += (
+            (SH2[0] * xy * sh4) +
+            (SH2[1] * yz * sh5) +
+            (SH2[2] * ((2.0 * zz) - xx - yy) * sh6) +
+            (SH2[3] * xz * sh7) +
+            (SH2[4] * (xx - yy) * sh8)
+        );
+    }
+
+    if(degree > 2)
+    {
+        vec3 sh9 = spherical_harmonic(splatIndex, 9);
+        vec3 sh10 = spherical_harmonic(splatIndex, 10);
+        vec3 sh11 = spherical_harmonic(splatIndex, 11);
+        vec3 sh12 = spherical_harmonic(splatIndex, 12);
+        vec3 sh13 = spherical_harmonic(splatIndex, 13);
+        vec3 sh14 = spherical_harmonic(splatIndex, 14);
+        vec3 sh15 = spherical_harmonic(splatIndex, 15);
+
+        result += (
+            (SH3[0] * y * ((3.0 * xx) - yy) * sh9) +
+            (SH3[1] * xy * z * sh10) +
+            (SH3[2] * y * ((4.0 * zz) - xx - yy ) * sh11) +
+            (SH3[3] * z * ((2.0 * zz) - (3.0 * xx) - (3.0 * yy)) * sh12) +
+            (SH3[4] * x * ( (4.0 * zz) - xx - yy) * sh13) +
+            (SH3[5] * z * (xx - yy) * sh14) +
+            (SH3[6] * x * ( xx - (3.0 * yy) ) * sh15)
+        );
+    }
+
+    return max(
+        result + vec3(0.5),
+        vec3(0.0)
+    );
+}
+
+vec3 spherical_harmonic(uint splatIndex, uint coefficient) 
+{
+    uint coefficientCount = pushConstants.renderInfo.w;
+    uint index = ((splatIndex * coefficientCount) + coefficient);
+
+    return sphericalHarmonicBuffer.coefficients[index].rgb;
+}
+
+mat3 quaternion_matrix(vec4 quaternion)
+{
+    quaternion = normalize(quaternion);
+
+    float x = quaternion.x;
+    float y = quaternion.y;
+    float z = quaternion.z;
+    float w = quaternion.w;
+
+    float xx = (2.0 * x * x);
+    float yy = (2.0 * y * y);
+    float zz = (2.0 * z * z);
+
+    float xy = (2.0 * x * y);
+    float xz = (2.0 * x * z);
+    float yz = (2.0 * y * z);
+
+    float xw = (2.0 * x * w);
+    float yw = (2.0 * y * w);
+    float zw = (2.0 * z * w);
+
+    return mat3(
+        vec3(
+            (1.0 - yy - zz), 
+            (xy + zw), 
+            (xz - yw)
+        ),
+        vec3(
+            (xy - zw), 
+            (1.0 - xx - zz), 
+            (yz + xw)
+        ),
+        vec3(
+            (xz + yw), 
+            (yz - xw), 
+            (1.0 - xx - yy)
+        )
+    );
+}
+
+uvec4 compute_tile_bounds(
+    vec2 centerNdc,
+    vec2 extentPixels,
+    vec2 viewport
+) {
+    vec2 centerPixels = (
+        (centerNdc * 0.5 + 0.5) *
+        viewport
+    );
+
+    vec2 maximumPixel = (viewport - vec2(1.0));
+    
+    vec2 minimum = clamp(
+        (centerPixels - extentPixels),
+        vec2(0.0),
+        maximumPixel
+    );
+
+    vec2 maximum = clamp(
+        (centerPixels + extentPixels),
+        vec2(0.0),
+        maximumPixel
+    );
+
+    uvec2 minimumTile = uvec2(minimum / float(SPLAT_TILE_SIZE));
+    uvec2 maximumTile = uvec2(maximum / float(SPLAT_TILE_SIZE));
+
+    return uvec4(
+        minimumTile,
+        maximumTile
+    );
+}

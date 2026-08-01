@@ -24,36 +24,6 @@ namespace
     std::vector<glm::vec4> pack_spherical_harmonics(const SplatCloud& cloud);
 }
 
-GraphicsPipelineConfig get_splat_gaussian_pipeline_config()
-{
-    GraphicsPipelineConfig pipelineConfig = {};
-
-    pipelineConfig.topology = vk::PrimitiveTopology::eTriangleStrip;
-
-    pipelineConfig.cullMode = vk::CullModeFlagBits::eNone;
-    pipelineConfig.frontFace = vk::FrontFace::eCounterClockwise;
-
-    pipelineConfig.depthTest = true;
-    pipelineConfig.depthWrite = false;
-    pipelineConfig.depthCompareOp = vk::CompareOp::eLess;
-
-    pipelineConfig.colorBlendAttachment.blendEnable = vk::True;
-    pipelineConfig.colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eOne;
-    pipelineConfig.colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-    pipelineConfig.colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
-    pipelineConfig.colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-    pipelineConfig.colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-    pipelineConfig.colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
-    pipelineConfig.colorBlendAttachment.colorWriteMask = (
-        vk::ColorComponentFlagBits::eR |
-        vk::ColorComponentFlagBits::eG |
-        vk::ColorComponentFlagBits::eB |
-        vk::ColorComponentFlagBits::eA 
-    );
-
-    return pipelineConfig;
-}
-
 SplatBuffer build_splat_buffer(
     const SplatCloud& cloud,
     VmaAllocator& allocator,
@@ -71,10 +41,7 @@ SplatBuffer build_splat_buffer(
     AllocatedBuffer gpuBuffer = upload_splat_data(
         gpuSplats.data(),
         ALLOC_SIZE,
-        (
-            vk::BufferUsageFlagBits::eVertexBuffer |
-            vk::BufferUsageFlagBits::eStorageBuffer
-        ),
+        vk::BufferUsageFlagBits::eStorageBuffer,
         "Splat Staging Buffer",        
         "Splat Buffer",
         allocator, 
@@ -89,10 +56,7 @@ SplatBuffer build_splat_buffer(
     SplatBuffer splatBuffer = {};
 
     splatBuffer.buffer = gpuBuffer;
-    splatBuffer.bufferOffset = 0;
     splatBuffer.splatCount = cloud.splat_count();
-    splatBuffer.boundsMin = cloud.boundsMin;
-    splatBuffer.boundsMax = cloud.boundsMax;
 
     deletionQueue.push_back(
         [splatBuffer] (VmaAllocator allocator) mutable->void {

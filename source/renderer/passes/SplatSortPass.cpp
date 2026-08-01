@@ -23,8 +23,6 @@ namespace
         vk::PipelineLayout pipelineLayout,
         const SplatFrameResources& resources,
         const std::vector<SplatSortScanLevel>& scanLevels,
-        uint32_t groupCountX,
-        uint32_t groupCountY,
         const SplatSortPushConstant& pushConstants
     );
 
@@ -60,16 +58,6 @@ uint32_t record_splat_sort_pass(
         nullptr
     );
 
-    uint32_t groupCountY = divide_round_up(
-        resources.sort.workgroupCapacity,
-        SPLAT_SORT_DISPATCH_ROW_CAPACITY
-    );
-
-    uint32_t groupCountX = divide_round_up(
-        resources.sort.workgroupCapacity,
-        groupCountY
-    );
-
     uint32_t inputBufferIndex = 0;
     uint32_t outputBufferIndex = 1;
 
@@ -87,8 +75,7 @@ uint32_t record_splat_sort_pass(
 
         record_splat_sort_digit(
             commandBuffer, pipelines, pipelineLayout,
-            resources, scanLevels, groupCountX, 
-            groupCountY, pushConstants
+            resources, scanLevels, pushConstants
         );
 
         std::swap(inputBufferIndex, outputBufferIndex);
@@ -112,8 +99,7 @@ uint32_t record_splat_sort_pass(
 
         record_splat_sort_digit(
             commandBuffer, pipelines, pipelineLayout,
-            resources, scanLevels, groupCountX, 
-            groupCountY, pushConstants
+            resources, scanLevels, pushConstants
         );
 
         std::swap(inputBufferIndex, outputBufferIndex);
@@ -130,8 +116,6 @@ namespace
         vk::PipelineLayout pipelineLayout,
         const SplatFrameResources& resources,
         const std::vector<SplatSortScanLevel>& scanLevels,
-        uint32_t groupCountX,
-        uint32_t groupCountY,
         const SplatSortPushConstant& pushConstants
     ) {
         commandBuffer.bindPipeline(
@@ -147,10 +131,9 @@ namespace
             &pushConstants
         );
 
-        commandBuffer.dispatch(
-            groupCountX,
-            groupCountY,
-            1
+        commandBuffer.dispatchIndirect(
+            resources.sort.dispatchCommands.buffer,
+            SPLAT_SORT_ENTRY_DISPATCH_OFFSET
         );
 
         vk::BufferMemoryBarrier histogramBarrier = make_buffer_memory_barrier(
@@ -422,10 +405,9 @@ namespace
             &pushConstants
         );
 
-        commandBuffer.dispatch(
-            groupCountX,
-            groupCountY,
-            1
+        commandBuffer.dispatchIndirect(
+            resources.sort.dispatchCommands.buffer,
+            SPLAT_SORT_ENTRY_DISPATCH_OFFSET
         );
 
         uint32_t outputBufferIndex = pushConstants.outputBufferIndex;

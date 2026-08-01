@@ -1,0 +1,200 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define FRAME_COLOR_IMAGE_ACCESS
+#define PROJECTED_SPLAT_BUFFER_ACCESS readonly
+#define ENTRY_SPLAT_INDEX_BUFFER_A_ACCESS readonly
+#define ENTRY_SPLAT_INDEX_BUFFER_B_ACCESS readonly
+#define SPLAT_TILE_RANGE_BUFFER_ACCESS readonly
+
+#include "SplatHelpers.glsl"
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants
+{
+    mat4 view;
+    vec4 cameraPosition;
+    vec4 projectionInfo;
+    uvec4 renderInfo;
+
+    layout(offset = 112) uint sortedBufferIndex;
+}
+pushConstants;
+
+const uint SPLAT_TILE_PIXEL_COUNT = (SPLAT_TILE_SIZE * SPLAT_TILE_SIZE);
+const float SPLAT_MIN_TRANSMITTANCE = 0.0001;
+
+shared vec2 batchCenters[SPLAT_TILE_PIXEL_COUNT];
+shared vec4 batchConicOpacity[SPLAT_TILE_PIXEL_COUNT];
+shared vec4 batchColors[SPLAT_TILE_PIXEL_COUNT];
+shared uint activePixelCount;
+
+void load_splat_batch(
+    uint batchStart,
+    uint batchCount,
+    vec2 viewport
+);
+
+void main()
+{
+    ivec2 pixelCoordinate = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageExtent = imageSize(colorBuffer);
+
+    bool pixelInBounds = all(
+        lessThan(
+            pixelCoordinate,
+            imageExtent
+        )
+    );
+
+    uvec2 tileCoordinate = gl_WorkGroupID.xy;
+    
+    uint tileCountX = (
+        (uint(imageExtent.x) + SPLAT_TILE_SIZE - 1) /
+        SPLAT_TILE_SIZE
+    );
+
+    uint tileIndex = (
+        (tileCoordinate.y * tileCountX) + 
+        tileCoordinate.x
+    );
+
+    SplatTileRange tileRange = tileRangeBuffer.ranges[tileIndex];
+    if(tileRange.startIndex >= tileRange.endIndex)
+        return;
+
+    vec2 pixelPosition = (vec2(pixelCoordinate) + vec2(0.5));
+    vec3 accumulatedColor = vec3(0.0);
+    float transmittance = 1.0;
+
+    bool pixelDone = !pixelInBounds;
+
+    for(
+        uint batchStart = tileRange.startIndex; 
+        batchStart < tileRange.endIndex;
+        batchStart += SPLAT_TILE_PIXEL_COUNT
+    ) {
+        uint batchCount = min(
+            SPLAT_TILE_PIXEL_COUNT,
+            tileRange.endIndex - batchStart
+        );
+
+        load_splat_batch(batchStart, batchCount, vec2(imageExtent));
+
+        barrier();
+
+        if(!pixelDone)
+        {
+            for(uint batchIndex = 0; batchIndex < batchCount; batchIndex++)
+            {
+                vec2 pixelOffset = batchCenters[batchIndex] - pixelPosition;
+                vec4 conicOpacity = batchConicOpacity[batchIndex];
+
+                float dx = pixelOffset.x;
+                float dy = pixelOffset.y;
+
+                float conicXX = conicOpacity.x;
+                float conicXY = conicOpacity.y;
+                float conicYY = conicOpacity.z;
+                float opacity = conicOpacity.w;
+
+                float gaussianExponent = (
+                    -0.5 * 
+                    (
+                        (conicXX * dx * dx) +
+                        (2.0 * conicXY * dx * dy) +
+                        (conicYY * dy * dy)
+                    )
+                );
+
+                vec4 splatColor = batchColors[batchIndex];
+                if((gaussianExponent > 0.0) || (gaussianExponent < splatColor.a))
+                    continue;
+
+                float gaussian = exp(gaussianExponent);
+                float alpha = min(
+                    SPLAT_MAX_ALPHA,
+                    opacity * gaussian
+                );
+
+                if(alpha < SPLAT_MIN_ALPHA)
+                    continue;
+
+                float contribution = transmittance * alpha;
+                accumulatedColor += contribution * splatColor.rgb;
+                
+                transmittance *= 1.0 - alpha;
+                if(transmittance < SPLAT_MIN_TRANSMITTANCE)
+                {
+                    pixelDone = true;
+                    break;
+                }
+            }
+        }
+
+        barrier();
+
+        if(gl_LocalInvocationIndex == 0)
+            activePixelCount = 0;
+
+        barrier();
+
+        if(!pixelDone)
+            atomicAdd(activePixelCount, 1);
+
+        barrier();
+
+        if(activePixelCount == 0)
+            break;
+    }
+
+    if(!pixelInBounds)
+        return;
+
+    vec3 backgroundColor = imageLoad(
+        colorBuffer,
+        pixelCoordinate
+    ).rgb;
+
+    vec3 finalColor = (
+        accumulatedColor +
+        (transmittance * backgroundColor)
+    );
+
+    imageStore(colorBuffer, pixelCoordinate, vec4(finalColor, 1.0));
+}
+
+void load_splat_batch(
+    uint batchStart,
+    uint batchCount,
+    vec2 viewport
+) {
+    uint localIndex = gl_LocalInvocationIndex;
+    if(localIndex >= batchCount)
+        return;
+
+    uint entryIndex = (batchStart + localIndex);
+    uint splatIndex = read_entry_splat_index(
+        entryIndex,
+        pushConstants.sortedBufferIndex
+    );
+
+    ProjectedSplat splat = projectedSplatBuffer.splats[splatIndex];
+    
+    vec2 centerNdc = (splat.clipCenter.xy / splat.clipCenter.w);
+
+    batchCenters[localIndex] = (
+        (centerNdc * 0.5 + 0.5) *
+        viewport
+    );
+
+    batchConicOpacity[localIndex] = splat.conicOpacity;
+    batchColors[localIndex] = vec4(
+        splat.color.rgb,
+        log(SPLAT_MIN_ALPHA / splat.conicOpacity.w)
+    );
+}

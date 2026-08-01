@@ -108,13 +108,15 @@
     "shader-validator.includes": [
         "${workspaceFolder}/shaders/include"
     ],
+
+    "editor.inlayHints.enabled": "off",
     
     "search.useParentIgnoreFiles": false,
     "search.quickOpen.includeHistory": false,
     "search.exclude": {
-        "**/obj/**": true,
-        "**/gpu/**": true,
-        "**/assets/**": true
+        "obj/**": true,
+        "gpu/**": true,
+        "assets/**": true
     },
 
     "explorer.fileNesting.enabled": true,

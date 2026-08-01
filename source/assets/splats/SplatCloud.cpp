@@ -20,22 +20,10 @@ uint32_t SplatCloud::spherical_harmonic_coefficient_count() const
     return (side * side);
 }
 
-glm::vec3 SplatCloud::center() const
-{
-    return ((boundsMin + boundsMax) * 0.5f);
-}
-
-glm::vec3 SplatCloud::size() const
-{
-    return (boundsMax - boundsMin);
-}
-
 void SplatCloud::clear()
 {
     splats.clear();
     sphericalHarmonics.clear();
-    
-    boundsMin = glm::vec3();
-    boundsMax = glm::vec3();
+
     info = {};
 }

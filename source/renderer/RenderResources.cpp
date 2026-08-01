@@ -1,18 +1,12 @@
 ﻿#include "renderer/RenderResources.hpp"
 
-#include "factory/SplatFactory.hpp"
 #include "factory/SplatFrameFactory.hpp"
 
 #include "renderer/core/Command.hpp"
-#include "renderer/core/Image.hpp"
 
 #include "renderer/resources/descriptors/Descriptors.hpp"
 
-#include "renderer/resources/shaders/Shader.hpp"
-
 #include "renderer/resources/splats/SplatFrameDescriptors.hpp"
-
-#include "renderer/ShaderPaths.hpp"
 
 bool RenderResources::build(
     RenderResourcesContext& context,
@@ -94,59 +88,6 @@ bool RenderResources::build(
             m_swapchain.imageViews[i], 
             vk::ImageLayout::eGeneral
         );
-    }
-
-    m_depthImage = create_depth_image(
-        context.allocator, context.logicalDevice, 
-        context.physicalDevice, m_swapchain.extent, 
-        m_deletionQueue, m_vmaDeletionQueue
-    );
-
-    if(!m_depthImage.image || !m_depthImage.imageView)
-    {
-        destroy(context);
-        return false;
-    }
-
-    GraphicsPipelineConfig splatPipelineConfig = get_splat_gaussian_pipeline_config();
-    m_splatGaussianPipeline = make_graphics_pipeline(
-        context.logicalDevice,
-        shader::splatGaussianVertex,
-        shader::splatGaussianFragment,
-        splatPipelineConfig,
-        context.pipelineLayout,
-        m_swapchain.format.format,
-        m_depthImage.format,
-        m_deletionQueue
-    );
-
-    if(!m_splatGaussianPipeline)
-    {
-        destroy(context);
-        return false;
-    }
-
-    bool depthTransitionSuccessful = immediate_submit(
-        context.logicalDevice, context.commandPool, context.graphicsQueue,
-        [this] (vk::CommandBuffer commandBuffer)->void {
-            transition_image_layout(
-                commandBuffer,
-                m_depthImage.image,
-                vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eDepthAttachmentOptimal,
-                vk::AccessFlagBits::eNone,
-                vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-                vk::PipelineStageFlagBits::eTopOfPipe,
-                vk::PipelineStageFlagBits::eEarlyFragmentTests,
-                vk::ImageAspectFlagBits::eDepth
-            );
-        }
-    );
-
-    if(!depthTransitionSuccessful)
-    {
-        destroy(context);
-        return false;
     }
 
     uint32_t tileCountX = (
@@ -260,9 +201,7 @@ void RenderResources::destroy(RenderResourcesContext& context)
     }
 
     m_descriptorPool = vk::DescriptorPool();
-    m_splatGaussianPipeline = vk::Pipeline();
     m_swapchain = {};
-    m_depthImage = {};
 }
 
 vk::SwapchainKHR RenderResources::swapchain_handle() const
@@ -280,29 +219,9 @@ vk::Image RenderResources::color_image(uint32_t imageIndex) const
     return m_swapchain.images[imageIndex];
 }
 
-vk::ImageView RenderResources::color_image_view(uint32_t imageIndex) const
-{
-    return m_swapchain.imageViews[imageIndex];
-}
-
 uint32_t RenderResources::color_image_count() const
 {
     return static_cast<uint32_t>(m_swapchain.images.size());
-}
-
-uint32_t RenderResources::color_image_view_count() const
-{
-    return static_cast<uint32_t>(m_swapchain.imageViews.size());
-}
-
-vk::Pipeline RenderResources::splat_gaussian_pipeline() const
-{
-    return m_splatGaussianPipeline;
-}
-
-const AllocatedImage& RenderResources::depth_image() const
-{
-    return m_depthImage;
 }
 
 vk::DescriptorSet RenderResources::swapchain_storage_descriptor_set(uint32_t imageIndex) const

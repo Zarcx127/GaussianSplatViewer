@@ -231,6 +231,16 @@ SplatFrameResources build_splat_frame_resources(
         vk::BufferUsageFlagBits::eStorageBuffer,
         "Splat Sort Radix Bucket Offset Buffer"
     );
+
+    resources.sort.dispatchCommands = create_processing_buffer(
+        allocator,
+        sizeof(GpuSplatSortDispatch),
+        (
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eIndirectBuffer
+        ),
+        "Splat Sort Dispatch Command Buffer"
+    );
 /////
 
     if(!splat_frame_resources_are_valid(resources))
@@ -398,6 +408,7 @@ namespace
         destroy_buffer(allocator, resources.sort.radixHistograms);
         destroy_buffer(allocator, resources.sort.radixScanBlockSums);
         destroy_buffer(allocator, resources.sort.radixBucketOffsets);
+        destroy_buffer(allocator, resources.sort.dispatchCommands);
 
         resources = {};
     }

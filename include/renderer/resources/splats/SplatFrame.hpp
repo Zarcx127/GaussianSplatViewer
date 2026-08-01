@@ -15,7 +15,7 @@
 struct alignas(16) GpuProjectedSplat
 {
     glm::vec4 clipCenter {};
-    glm::vec4 ellipseAxes {};
+    glm::vec4 conicOpacity {};
     glm::vec4 color {};
     glm::uvec4 tileBounds {};
 };

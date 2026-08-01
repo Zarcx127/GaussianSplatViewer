@@ -93,11 +93,6 @@ bool PlyReader::read_scalar(
     return false;
 }
 
-PlyFormat PlyReader::format() const
-{
-    return m_format;
-}
-
 uint64_t PlyReader::vertex_count() const
 {
     return m_vertexCount;

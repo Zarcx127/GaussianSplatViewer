@@ -15,11 +15,6 @@ void Logger::set_mode(bool mode)
     m_enabled = build::enableLogging && mode;
 }
 
-bool Logger::is_enabled()
-{
-    return m_enabled;
-}
-
 #ifdef DEBUG
 
 #include <iostream>
@@ -85,14 +80,6 @@ vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
     );
 
     return messenger;
-}
-
-void Logger::print_list(const char** list, uint32_t count, const char* prefix)
-{
-    if(!m_enabled) return;
-    
-    for(uint32_t i = 0; i < count; i++)
-        cout << prefix << list[i] << endl;
 }
 
 void Logger::print_vector(const vector<const char*>& vec, const char* prefix)
@@ -422,8 +409,6 @@ vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
 ) {
     return vk::DebugUtilsMessengerEXT();
 }
-
-void Logger::print_list(const char** list, uint32_t count, const char* prefix) {}
 
 void Logger::print_vector(const std::vector<const char*>& vec, const char* prefix) {}
 

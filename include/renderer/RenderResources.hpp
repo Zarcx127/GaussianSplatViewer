@@ -13,8 +13,6 @@
 #include "renderer/core/Frame.hpp"
 #include "renderer/core/Swapchain.hpp"
 
-#include "renderer/resources/images/AllocatedImage.hpp"
-
 #include "renderer/resources/shaders/ShaderInterface.hpp"
 
 #include "renderer/resources/splats/Splat.hpp"
@@ -46,7 +44,6 @@ public:
 
     RenderResources(RenderResources&&) = delete;
     RenderResources& operator=(RenderResources&&) = delete;
-
     
     bool build(
         RenderResourcesContext& context,
@@ -63,14 +60,8 @@ public:
     vk::Extent2D extent() const;
 
     vk::Image color_image(uint32_t imageIndex) const;
-    vk::ImageView color_image_view(uint32_t imageIndex) const;
 
     uint32_t color_image_count() const;
-    uint32_t color_image_view_count() const;
-
-    const AllocatedImage& depth_image() const;
-
-    vk::Pipeline splat_gaussian_pipeline() const;
 
     vk::DescriptorSet swapchain_storage_descriptor_set(uint32_t imageIndex) const;
     uint32_t swapchain_storage_descriptor_set_count() const;
@@ -86,12 +77,9 @@ private:
     std::deque<std::function<void(VmaAllocator)>> m_vmaDeletionQueue;
 
     Swapchain m_swapchain;
-    AllocatedImage m_depthImage;
 
     vk::DescriptorPool m_descriptorPool {};
     std::vector<vk::DescriptorSet> m_swapchainImageDescriptorSets;
-
-    vk::Pipeline m_splatGaussianPipeline {};
 
     std::vector<Frame> m_frames;
     std::vector<vk::Fence> m_imagesInFlight;

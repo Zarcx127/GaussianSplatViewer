@@ -1,0 +1,76 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define PROJECTED_SPLAT_BUFFER_ACCESS readonly
+#define VISIBLE_SPLAT_INDEX_BUFFER_ACCESS readonly
+#define ENTRY_KEY_BUFFER_A_ACCESS writeonly
+#define ENTRY_SPLAT_INDEX_BUFFER_A_ACCESS writeonly
+#define SPLAT_COUNTER_BUFFER_ACCESS readonly
+#define SPLAT_ENTRY_RANGE_BUFFER_ACCESS readonly
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants
+{
+    mat4 view;
+    vec4 cameraPosition;
+    vec4 projectionInfo;
+    uvec4 renderInfo;
+}
+pushConstants;
+
+void main()
+{
+    uint visibleIndex = gl_GlobalInvocationID.x;
+    if(visibleIndex >= counters.visibleCount)
+        return;
+
+    uint splatIndex = visibleSplatIndexBuffer.indices[visibleIndex];
+    ProjectedSplat splat = projectedSplatBuffer.splats[splatIndex];
+
+    uvec2 tileSpan = (splat.tileBounds.zw - splat.tileBounds.xy + uvec2(1));
+
+    SplatEntryRange entryRange = splatEntryRangeBuffer.ranges[visibleIndex];
+    uint splatEntryCount = entryRange.entryCount;
+    uint firstEntry = entryRange.entryOffset;
+
+    uint entryCapacity = entrySplatIndexBufferA.indices.length();
+    if(firstEntry >= entryCapacity)
+        return;
+
+    uint writableEntryCount = min(
+        splatEntryCount,
+        (entryCapacity - firstEntry)
+    );
+
+    uint tileCountX = (
+        (pushConstants.renderInfo.x + SPLAT_TILE_SIZE - 1) /
+        SPLAT_TILE_SIZE
+    );
+
+    uint depthKey = floatBitsToUint(splat.clipCenter.w);
+
+    for(uint entryOffset = 0; entryOffset < writableEntryCount; entryOffset++)
+    {
+        uint tileX = (
+            splat.tileBounds.x + 
+            (entryOffset % tileSpan.x)
+        );
+
+        uint tileY = (
+            splat.tileBounds.y +
+            (entryOffset / tileSpan.x)
+        );
+
+        uint tileIndex = (tileY * tileCountX) + tileX;
+        uint entryIndex = firstEntry + entryOffset;
+
+        entryKeyBufferA.keys[entryIndex].tileIndex = tileIndex;
+        entryKeyBufferA.keys[entryIndex].depthKey = depthKey;
+        entrySplatIndexBufferA.indices[entryIndex] = splatIndex;
+    }
+}

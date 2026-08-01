@@ -25,8 +25,6 @@ public:
     bool build(GLFWwindow* window, const char* applicationName);
     void destroy();
 
-    vk::Instance instance() const;
-
     vk::PhysicalDevice physical_device() const;
     
     vk::Device logical_device() const;
@@ -36,7 +34,6 @@ public:
 
     vk::SurfaceKHR surface() const;
 
-    uint32_t graphics_queue_family_index() const;
     vk::Queue graphics_queue() const;
 
     vk::CommandPool command_pool() const;

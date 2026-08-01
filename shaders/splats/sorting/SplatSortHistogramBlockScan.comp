@@ -1,0 +1,84 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#define RADIX_SCAN_BLOCK_SUM_BUFFER_ACCESS
+#define RADIX_BUCKET_OFFSET_BUFFER_ACCESS writeonly
+#define WORKGROUP_SCAN_LOCAL_SIZE SPLAT_SORT_SCAN_LOCAL_SIZE
+
+#include "ShaderBindings.glsl"
+#include "SplatConstants.glsl"
+#include "SplatWorkgroupScan.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform SortScanPushConstants
+{
+    layout(offset = 112) uint valueCount;
+
+    uint inputOffset;
+    uint outputOffset;
+    uint writeBucketTotal;
+}
+sortScanPushConstants;
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+    uint blockIndex = gl_WorkGroupID.x;
+    uint bucketIndex = gl_WorkGroupID.y;
+
+    uint blockCapacityPerBucket = (
+        uint(radixScanBlockSumBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint bucketBase = (bucketIndex * blockCapacityPerBucket);
+    uint valueIndex = (
+        (blockIndex * SPLAT_SORT_SCAN_LOCAL_SIZE) +
+        localIndex
+    );
+
+    uint inputIndex = (
+        bucketBase +
+        sortScanPushConstants.inputOffset +
+        valueIndex
+    );
+
+    scanValues[localIndex] = (
+        (valueIndex < sortScanPushConstants.valueCount)
+            ? radixScanBlockSumBuffer.values[inputIndex]
+            : 0
+    );
+
+    barrier();
+
+    workgroup_scan_upsweep();
+    if(localIndex == 0)
+    {
+        uint finalIndex = (SPLAT_SORT_SCAN_LOCAL_SIZE - 1);
+        uint blockTotal = scanValues[finalIndex];
+
+        if(sortScanPushConstants.writeBucketTotal != 0)
+        {
+            radixBucketOffsetBuffer.values[bucketIndex] = blockTotal;
+        }
+        else
+        {
+            uint outputIndex = (
+                bucketBase +
+                sortScanPushConstants.outputOffset +
+                blockIndex
+            );
+
+            radixScanBlockSumBuffer.values[outputIndex] = blockTotal;
+        }
+
+        scanValues[finalIndex] = 0;
+    }
+
+    barrier();
+
+    workgroup_scan_downsweep();
+    if(valueIndex < sortScanPushConstants.valueCount)
+        radixScanBlockSumBuffer.values[inputIndex] = scanValues[localIndex];
+}

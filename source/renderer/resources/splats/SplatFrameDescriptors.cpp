@@ -4,8 +4,6 @@
 
 namespace
 {
-    vk::ShaderStageFlags get_splat_frame_binding_stages(SplatFrameBinding binding);
-
     const AllocatedBuffer* get_splat_frame_binding_buffer(
         SplatFrameBinding binding,
         const SplatBuffer& splatBuffer,
@@ -24,7 +22,7 @@ vk::DescriptorSetLayout build_splat_frame_descriptor_set_layout(
 
         builder.add_entry(
             index,
-            get_splat_frame_binding_stages(binding),
+            vk::ShaderStageFlagBits::eCompute,
             vk::DescriptorType::eStorageBuffer
         );
     }
@@ -59,23 +57,6 @@ bool write_splat_frame_descriptor_set(
 
 namespace
 {
-    vk::ShaderStageFlags get_splat_frame_binding_stages(SplatFrameBinding binding)
-    {
-        if(
-            (binding == SplatFrameBinding::ProjectedSplats) ||
-            (binding == SplatFrameBinding::VisibleSplatIndices) ||
-            (binding == SplatFrameBinding::EntrySplatIndicesA) ||
-            (binding == SplatFrameBinding::EntrySplatIndicesB)
-        ) {
-            return (
-                vk::ShaderStageFlagBits::eCompute |
-                vk::ShaderStageFlagBits::eVertex
-            );
-        }
-
-        return vk::ShaderStageFlagBits::eCompute;
-    }
-
     const AllocatedBuffer* get_splat_frame_binding_buffer(
         SplatFrameBinding binding,
         const SplatBuffer& splatBuffer,
@@ -124,10 +105,13 @@ namespace
                 return &resources.sort.radixHistograms;
 
             case Binding::SortRadixScanBlockSums:
-                return &resources.sort.radixScanBlockSums;
+            return &resources.sort.radixScanBlockSums;
 
             case Binding::SortRadixBucketOffsets:
                 return &resources.sort.radixBucketOffsets;
+
+            case Binding::SortDispatchCommands:
+                return &resources.sort.dispatchCommands;
         }
 
         return nullptr;
