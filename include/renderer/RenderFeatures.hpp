@@ -48,7 +48,13 @@ public:
     RenderFeatures(RenderFeatures&&) = delete;
     RenderFeatures& operator=(RenderFeatures&&) = delete;
 
-    bool build(RenderFeaturesContext& context, const char* splatPath);
+    bool build(
+        RenderFeaturesContext& context, 
+        const char* splatPath,
+        const char*& loadError
+    );
+    
+    
     void destroy(RenderFeaturesContext& context);
 
     RenderFeatureFrameInfo frame_info() const;

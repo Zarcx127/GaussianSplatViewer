@@ -8,8 +8,13 @@
 
 #include "renderer/resources/descriptors/Descriptors.hpp"
 
-bool RenderFeatures::build(RenderFeaturesContext& context, const char* splatPath)
-{
+bool RenderFeatures::build(
+    RenderFeaturesContext& context, 
+    const char* splatPath,
+    const char*& loadError
+) {
+    loadError = nullptr;
+    
     Logger* logger = Logger::get_logger();
 
     if(!render_features_context_is_valid(context)) 
@@ -18,7 +23,9 @@ bool RenderFeatures::build(RenderFeaturesContext& context, const char* splatPath
     PlySplatLoadResult loadResult = load_ply_splat_cloud(splatPath);
     if(!loadResult.success)
     {
-        logger->print(loadResult.error);
+        loadError = loadResult.error;
+        logger->print(loadError);
+
         return false;
     }
 

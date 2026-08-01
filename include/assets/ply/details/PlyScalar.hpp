@@ -6,7 +6,7 @@
 #include <string>
 #include <cstdint>
 
-enum class PlyScalarCategory
+enum class PlyScalarCategory : uint32_t
 {
     Invalid,
     SignedInteger,

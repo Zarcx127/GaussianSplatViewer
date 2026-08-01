@@ -22,18 +22,20 @@ namespace
     constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
     constexpr std::chrono::milliseconds RESIZE_DEBOUNCE_TIME = 
         std::chrono::milliseconds(50);
-
-    constexpr const char* SPLAT_PATH = "splats/scene.ply";
 }
 
-Engine::Engine(GLFWwindow* window)
+Engine::Engine(GLFWwindow* window, const char* splatPath)
 {
     m_logger = Logger::get_logger();
+
     m_window = window;
+    m_splatPath = splatPath;
 }
 
-void Engine::render_loop(AppState& state, const std::function<InputState()>& getInput)
-{
+void Engine::render_loop(
+    AppState& state, 
+    const std::function<InputState()>& getInput
+) {
     state.renderStatus.store(RenderStatus::Initializing, std::memory_order_release);
 
     uint32_t initialWidth = 0;
@@ -133,9 +135,25 @@ void Engine::render_loop(AppState& state, const std::function<InputState()>& get
         update_timing(state);
     }
 
+    RenderStatus finalStatus = 
+        state.renderStatus.load(std::memory_order_acquire);
+
     state.renderStatus.store(RenderStatus::Stopping, std::memory_order_release);
+
     shutdown();
-    state.renderStatus.store(RenderStatus::Stopped, std::memory_order_release);
+
+    if(finalStatus != RenderStatus::FatalError)
+        finalStatus = RenderStatus::Stopped;
+    
+    state.renderStatus.store(
+        finalStatus,    
+        std::memory_order_release
+    );
+}
+
+const char* Engine::load_error() const
+{
+    return m_loadError;
 }
 
 bool Engine::init(uint32_t width, uint32_t height)
@@ -504,9 +522,14 @@ void Engine::update_timing(AppState& state)
 }
 
 bool Engine::init_render_features()
-{
+{    
+    if(!m_splatPath)
+        return false;
+
     RenderFeaturesContext context = make_render_features_context();
-    return m_renderFeatures.build(context, SPLAT_PATH);
+    
+    m_loadError = nullptr;
+    return m_renderFeatures.build(context, m_splatPath, m_loadError);
 }
 
 void Engine::destroy_render_features()

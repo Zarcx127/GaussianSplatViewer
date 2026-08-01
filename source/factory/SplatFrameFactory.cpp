@@ -97,7 +97,6 @@ SplatFrameResources build_splat_frame_resources(
         (sizeof(uint32_t) * static_cast<vk::DeviceSize>(entryCapacity))
     );
 
-// FLAG //
     resources.projectedSplats = create_processing_buffer(
         allocator,
         (sizeof(GpuProjectedSplat) * static_cast<vk::DeviceSize>(splatCapacity)),
@@ -241,8 +240,7 @@ SplatFrameResources build_splat_frame_resources(
         ),
         "Splat Sort Dispatch Command Buffer"
     );
-/////
-
+    
     if(!splat_frame_resources_are_valid(resources))
     {
         destroy_splat_frame_resources(allocator, resources);

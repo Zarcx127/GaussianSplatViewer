@@ -316,7 +316,7 @@ vec3 evaluate_color(uint splatIndex, Splat splat)
         return splat.color.rgb;
 
     direction *= inversesqrt(lengthSquared);
-    direction = transpose(PLY_TO_ENGINE) * direction;
+    direction = (transpose(PLY_TO_ENGINE) * direction);
 
     uint degree = min(
         pushConstants.renderInfo.z,

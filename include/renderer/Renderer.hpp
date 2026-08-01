@@ -28,7 +28,7 @@
 class Engine
 {
 public:
-    Engine(GLFWwindow* window);
+    Engine(GLFWwindow* window, const char* splatPath);
 
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
@@ -37,13 +37,20 @@ public:
     Engine& operator=(Engine&&) = delete;
 
     void render_loop(
-        AppState& state, const std::function<InputState()>& getInput
+        AppState& state, 
+        const std::function<InputState()>& getInput
     );
+    
+    const char* load_error() const;
     
     ~Engine();
     
 private:
     GLFWwindow* m_window { nullptr };
+
+    const char* m_splatPath { nullptr };
+    const char* m_loadError { nullptr };
+
     Logger* m_logger { nullptr };
 
     std::deque<std::function<void(vk::Device)>> m_interfaceDeletionQueue;

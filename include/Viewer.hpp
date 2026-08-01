@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef APP_H
-#define APP_H
+#ifndef VIEWER_H
+#define VIEWER_H
 
 #include <mutex>
 #include <thread>
@@ -17,18 +17,20 @@
 #include "renderer/Renderer.hpp"
 
 #include "AppState.hpp"
+#include "ApplicationSession.hpp"
 
-class App
+class Viewer
 {
 public:
     AppState state;
+    
+    Viewer(GLFWwindow* window, Engine* engine);
 
-    App(GLFWwindow* window, Engine* engine);
-    ~App();
-
-    void main_loop();
+    ViewerResult main_loop();
 
     InputState snapshot_input();
+
+    ~Viewer();
 
 private:
     Logger* m_logger { nullptr };

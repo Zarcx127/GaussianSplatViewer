@@ -10,7 +10,7 @@
 
 #include "assets/ply/details/PlyScalar.hpp"
 
-enum class PlyFormat
+enum class PlyFormat : uint32_t
 {
     Unknown,
     Ascii,

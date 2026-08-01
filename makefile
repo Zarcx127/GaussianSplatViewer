@@ -1,4 +1,4 @@
-OUT := graphics
+OUT := GaussianSplatViewer
 
 mode ?= debug
 
@@ -24,21 +24,27 @@ ifeq ($(JOBS), 0)
 endif
 
 CC := g++
-FLAGS_OBJ := -std=c++17 -O2 -Werror -MMD -MP \
-	-DVULKAN_HPP_NO_EXCEPTIONS \
+FLAGS_OBJ := -std=c++17 -O2 -MMD -MP \
+	-Werror \
 	-DGLFW_INCLUDE_NONE \
-	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+	-DVULKAN_HPP_NO_EXCEPTIONS -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 \
+	-DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 \
+
+# for later #
+# -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow #
+
+WINDRES := windres
 
 GLSLC = glslc
 FLAGS_SPV = -MD -I"$(SHD_INC_DIR)"
 
 INCLUDE := -I"$(INC_DIR)" -I"$(subst \,/,$(VULKAN_SDK))/Include"
 FLAGS_EXE := -std=c++17 -O2 \
-	-L$(subst \,/,$(VULKAN_SDK))/Lib \
-	-static -lvulkan-1 -lglfw3 -lgdi32
+	-L$(subst \,/,$(VULKAN_SDK))/Lib/ \
+	-static -lvulkan-1 -lglfw3 -lgdi32 -lole32 -luuid -ldwmapi
 
 SRCs_RAW := $(shell \
-	powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp \
+	powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp\
 	| ForEach-Object { $$_.FullName }")
 
 SHADERS_RAW := $(shell \
@@ -56,6 +62,8 @@ OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
 SHADER_PATHS := $(patsubst $(SHD_DIR)%,%,$(SHADERS))
 SHADER_NAMES := $(subst /,-,$(SHADER_PATHS))
 SPVs := $(addprefix $(GPU_DIR),$(addsuffix .spv,$(SHADER_NAMES)))
+
+RESOURCE_OBJ := $(OBJ_DIR)$(OUT).res
 
 OBJ_DEPs := $(OBJs:.o=.d)
 SPV_DEPs := $(addsuffix .d,$(SPVs))
@@ -197,9 +205,6 @@ release:
 
 	@echo $(RELEASE) is ready to export
 
-$(EXE): $(SPVs) $(OBJs)
-	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
-
 clean:
 	@$(MAKE_NP) clean_obj mode=debug
 	@$(MAKE_NP) clean_obj mode=release
@@ -306,14 +311,20 @@ delete_shader:
 
 .SECONDEXPANSION:
 
+$(EXE): $(SPVs) $(OBJs) $(RESOURCE_OBJ)
+	$(CC) $(INCLUDE) $(OBJs) $(RESOURCE_OBJ) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
+
+$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
+	@if not exist "$(dir $@)" mkdir "$(dir $@)"
+	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
+
 $(GPU_DIR)%.spv: $$(SHD_DIR)$$(subst -,/,$$*)
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
 	
 	$(GLSLC) $(FLAGS_SPV) "$<" -o "$@"
 
-$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
-	@if not exist "$(dir $@)" mkdir "$(dir $@)"
-	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
+$(RESOURCE_OBJ): $(CURR_DIR)$(OUT).rc $(CURR_DIR)$(OUT).manifest
+	@$(WINDRES) $(CURR_DIR)$(OUT).rc -O coff -o $(RESOURCE_OBJ)
 
 CMD_ARGS := $(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS))
 .PHONY: $(CMD_ARGS)

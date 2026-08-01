@@ -1,4 +1,4 @@
-#include "App.hpp"
+#include "Viewer.hpp"
 
 #include <sstream>
 
@@ -7,7 +7,7 @@ namespace
     constexpr double EVENT_WAIT_TIMEOUT = 1.0 / 120.0;
 }
 
-App::App(GLFWwindow* window, Engine* engine)
+Viewer::Viewer(GLFWwindow* window, Engine* engine)
 {
     m_window = window;
     m_engine = engine;
@@ -22,9 +22,9 @@ App::App(GLFWwindow* window, Engine* engine)
 
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, window_resize_callback);
-    glfwSetKeyCallback(window, App::key_callback);
-    glfwSetMouseButtonCallback(window, App::mouse_button_callback);
-    glfwSetCursorPosCallback(window, App::cursor_pos_callback);
+    glfwSetKeyCallback(window, Viewer::key_callback);
+    glfwSetMouseButtonCallback(window, Viewer::mouse_button_callback);
+    glfwSetCursorPosCallback(window, Viewer::cursor_pos_callback);
 
     double mouseX = 0.0;
     double mouseY = 0.0;
@@ -36,7 +36,7 @@ App::App(GLFWwindow* window, Engine* engine)
     m_inputState.mouseY = mouseY;
 }
 
-void App::main_loop()
+ViewerResult Viewer::main_loop()
 {
     m_renderThread = std::thread(
         [this] ()->void {
@@ -69,9 +69,25 @@ void App::main_loop()
         m_renderThread.join();
 
     m_logger->print("Window Closed");
+
+    const RenderStatus renderStatus = 
+        state.renderStatus.load(std::memory_order_acquire);
+
+    if(renderStatus == RenderStatus::InitFailed)
+    {
+        if(m_engine->load_error())
+            return ViewerResult::LoadFailed;
+
+        return ViewerResult::FatalError;
+    }
+
+    if(renderStatus == RenderStatus::FatalError)
+        return ViewerResult::FatalError;
+
+    return ViewerResult::ReturnToLauncher;
 }
 
-InputState App::snapshot_input() 
+InputState Viewer::snapshot_input() 
 {
     std::lock_guard<std::mutex> lock(m_inputMutex);
 
@@ -83,23 +99,9 @@ InputState App::snapshot_input()
     return snapshot;
 }
 
-App::~App()
+void Viewer::window_resize_callback(GLFWwindow* window, int width, int height)
 {
-    state.quitRequested.store(true, std::memory_order_release);
-
-    if(m_renderThread.joinable())
-        m_renderThread.join();
-
-    glfwSetWindowUserPointer(m_window, nullptr);
-    glfwSetFramebufferSizeCallback(m_window, nullptr);
-    glfwSetKeyCallback(m_window, nullptr);
-    glfwSetMouseButtonCallback(m_window, nullptr);
-    glfwSetCursorPosCallback(m_window, nullptr);
-}
-
-void App::window_resize_callback(GLFWwindow* window, int width, int height)
-{
-    App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+    Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
 
     app->state.framebufferWidth.store(width, std::memory_order_relaxed);
@@ -108,9 +110,9 @@ void App::window_resize_callback(GLFWwindow* window, int width, int height)
     app->state.resizeGeneration.fetch_add(1, std::memory_order_release);
 }
 
-void App::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void Viewer::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+    Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
 
     bool pressed = (action != GLFW_RELEASE);
@@ -128,9 +130,9 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
     }
 }
 
-void App::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+void Viewer::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
-    App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+    Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
 
     if(button != GLFW_MOUSE_BUTTON_RIGHT)
@@ -162,9 +164,9 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
     }
 }
 
-void App::cursor_pos_callback(GLFWwindow* window, double xPos, double yPos)
+void Viewer::cursor_pos_callback(GLFWwindow* window, double xPos, double yPos)
 {
-    App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+    Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
 
     std::lock_guard<std::mutex> lock(app->m_inputMutex);
@@ -180,4 +182,18 @@ void App::cursor_pos_callback(GLFWwindow* window, double xPos, double yPos)
         app->m_inputState.mouseDeltaX += dx;
         app->m_inputState.mouseDeltaY += dy;
     }
+}
+
+Viewer::~Viewer()
+{
+    state.quitRequested.store(true, std::memory_order_release);
+
+    if(m_renderThread.joinable())
+        m_renderThread.join();
+
+    glfwSetWindowUserPointer(m_window, nullptr);
+    glfwSetFramebufferSizeCallback(m_window, nullptr);
+    glfwSetKeyCallback(m_window, nullptr);
+    glfwSetMouseButtonCallback(m_window, nullptr);
+    glfwSetCursorPosCallback(m_window, nullptr);
 }
