@@ -1,0 +1,63 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 2, binding = 5, std430) readonly buffer EntrySplatIndexBuffer
+{
+    uint indices[];
+}
+entrySplatIndexBuffer;
+
+layout(set = 2, binding = 7, std430) buffer SplatCounterBuffer
+{
+    uint visibleCount;
+    uint entryCount;
+    uint requestedEntryCount;
+    uint overflowCount;
+}
+counters;
+
+layout(set = 2, binding = 10, std430) readonly buffer SplatEntryRangeBuffer
+{
+    SplatEntryRange ranges[];
+}
+splatEntryRangeBuffer;
+
+void main()
+{
+    if(counters.visibleCount == 0)
+    {
+        counters.entryCount = 0;
+        counters.requestedEntryCount = 0;
+        counters.overflowCount = 0;
+        return;
+    }
+
+    SplatEntryRange finalRange = splatEntryRangeBuffer.ranges[
+        counters.visibleCount - 1
+    ];
+
+    uint requestedEntryCount = (
+        finalRange.entryOffset +
+        finalRange.entryCount
+    );
+
+    uint entryCapacity = uint(
+        entrySplatIndexBuffer.indices.length()
+    );
+
+    uint validEntryCount = min(
+        requestedEntryCount,
+        entryCapacity
+    );
+
+    counters.entryCount = validEntryCount;
+    counters.requestedEntryCount = requestedEntryCount;
+    counters.overflowCount = (
+        requestedEntryCount -
+        validEntryCount
+    );
+}

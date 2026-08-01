@@ -52,3 +52,22 @@ vk::Fence make_fence(
 
     return fence;
 }
+
+vk::BufferMemoryBarrier make_buffer_memory_barrier(
+    vk::Buffer buffer,
+    vk::DeviceSize size,
+    vk::AccessFlags sourceAccess,
+    vk::AccessFlags destinationAccess
+) {
+    vk::BufferMemoryBarrier barrier = {};
+
+    barrier.srcAccessMask = sourceAccess;
+    barrier.dstAccessMask = destinationAccess;
+    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    barrier.buffer = buffer;
+    barrier.offset = 0;
+    barrier.size = size;
+
+    return barrier;
+}

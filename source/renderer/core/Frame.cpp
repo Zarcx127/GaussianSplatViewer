@@ -28,17 +28,10 @@ bool Frame::is_valid(uint32_t swapchainImageCount) const
     if(
         !commandBuffer ||
         !splatFrameDescriptorSet ||
-        !splatResources.projectedSplats.buffer ||
-        !splatResources.visibleSplatIndices.buffer ||
-        !splatResources.sortKeys[0].buffer ||
-        !splatResources.sortKeys[1].buffer ||
-        !splatResources.entrySplatIndices[0].buffer ||
-        !splatResources.entrySplatIndices[1].buffer ||
-        !splatResources.counters.buffer ||
-        !splatResources.drawCommand.buffer ||
         !imageAcquiredSemaphore ||
         !renderFinishedFence ||
-        (renderFinishedSemaphores.size() != swapchainImageCount)
+        (renderFinishedSemaphores.size() != swapchainImageCount) ||
+        !splat_frame_resources_are_valid(splatResources)
     ) {
         return false;
     }

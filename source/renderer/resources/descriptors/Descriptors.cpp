@@ -45,9 +45,20 @@ void DescriptorSetLayoutBuilder::add_entry(
     vk::ShaderStageFlags stage, 
     vk::DescriptorType type
 ) {
+    add_entry(
+        static_cast<uint32_t>(m_layoutBindings.size()),
+        stage, type
+    );
+}
+
+void DescriptorSetLayoutBuilder::add_entry(
+    uint32_t binding,
+    vk::ShaderStageFlags stage,
+    vk::DescriptorType type
+) {
     vk::DescriptorSetLayoutBinding entry = {};
 
-    entry.binding = m_layoutBindings.size();
+    entry.binding = binding;
     entry.descriptorCount = 1;
     entry.descriptorType = type;
     entry.stageFlags = stage;
@@ -65,8 +76,10 @@ DescriptorPoolBuilder::DescriptorPoolBuilder(vk::Device& device)
     m_device = &device;
 }
 
-vk::DescriptorPool DescriptorPoolBuilder::build(uint32_t descriptorSetCount, std::deque<std::function<void(vk::Device)>>& deletionQueue)
-{
+vk::DescriptorPool DescriptorPoolBuilder::build(
+    uint32_t descriptorSetCount, 
+    std::deque<std::function<void(vk::Device)>>& deletionQueue
+) {
     Logger* logger = Logger::get_logger();
     vk::DescriptorPoolCreateInfo poolInfo = {};
 
@@ -97,8 +110,10 @@ vk::DescriptorPool DescriptorPoolBuilder::build(uint32_t descriptorSetCount, std
     return descriptorPool;
 }
 
-void DescriptorPoolBuilder::add_entry(vk::DescriptorType bindingType, uint32_t descriptorCount)
-{
+void DescriptorPoolBuilder::add_entry(
+    vk::DescriptorType bindingType, 
+    uint32_t descriptorCount
+) {
     vk::DescriptorPoolSize poolSize = {};
 
     poolSize.descriptorCount = descriptorCount;

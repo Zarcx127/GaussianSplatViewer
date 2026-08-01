@@ -1,0 +1,119 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "SplatStructures.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 2, binding = 3, std430) readonly buffer SplatEntryKeyBufferA
+{
+    SplatEntryKey keys[];
+}
+entryKeyBufferA;
+
+layout(set = 2, binding = 4, std430) readonly buffer SplatEntryKeyBufferB
+{
+    SplatEntryKey keys[];
+}
+entryKeyBufferB;
+
+layout(set = 2, binding = 7, std430) readonly buffer SplatCounterBuffer
+{
+    uint visibleCount;
+    uint entryCount;
+    uint requestedEntryCount;
+    uint overflowCount;
+}
+counters;
+
+layout(set = 2, binding = 12, std430) writeonly buffer RadixHistogramBuffer
+{
+    uint values[];
+}
+radixHistogramBuffer;
+
+layout(push_constant) uniform SortPushConstants
+{
+    layout(offset = 112) uint digitShift;
+
+    uint keyComponent;
+    uint inputBufferIndex;
+    uint outputBufferIndex;
+}
+sortPushConstants;
+
+const uint SPLAT_SORT_LOCAL_SIZE = 256;
+
+const uint SPLAT_SORT_RADIX_BITS = 4;
+const uint SPLAT_SORT_RADIX_BUCKET_COUNT = (
+    1U << SPLAT_SORT_RADIX_BITS
+);
+
+const uint SPLAT_SORT_KEY_DEPTH = 0;
+const uint SPLAT_SORT_KEY_TILE = 1;
+
+shared uint localHistogram[SPLAT_SORT_RADIX_BUCKET_COUNT];
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+
+    uint workgroupIndex = (
+        gl_WorkGroupID.x +
+        (gl_WorkGroupID.y * gl_NumWorkGroups.x)
+    );
+
+    uint workgroupCapacity = (
+        uint(radixHistogramBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    if(workgroupIndex >= workgroupCapacity)
+        return;
+
+    if(localIndex < SPLAT_SORT_RADIX_BUCKET_COUNT)
+        localHistogram[localIndex] = 0;
+
+    barrier();
+
+    uint entryIndex = (
+        (workgroupIndex * SPLAT_SORT_LOCAL_SIZE) +
+        localIndex
+    );
+
+    if(entryIndex < counters.entryCount)
+    {
+        SplatEntryKey key = entryKeyBufferA.keys[entryIndex];
+
+        if(sortPushConstants.inputBufferIndex == 1)
+            key = entryKeyBufferB.keys[entryIndex];
+
+        uint keyValue = key.depthKey;
+
+        if(sortPushConstants.keyComponent == SPLAT_SORT_KEY_TILE)
+            keyValue = key.tileIndex;
+
+        uint bucketIndex = (
+            keyValue >>
+            sortPushConstants.digitShift
+        ) & (SPLAT_SORT_RADIX_BUCKET_COUNT - 1);
+
+        atomicAdd(
+            localHistogram[bucketIndex],
+            1
+        );
+    }
+
+    barrier();
+
+    if(localIndex < SPLAT_SORT_RADIX_BUCKET_COUNT)
+    {
+        uint histogramIndex = (
+            (localIndex * workgroupCapacity) +
+            workgroupIndex
+        );
+
+        radixHistogramBuffer.values[histogramIndex] =
+            localHistogram[localIndex];
+    }
+}

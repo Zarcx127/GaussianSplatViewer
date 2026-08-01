@@ -126,9 +126,6 @@ vk::Device create_logical_device(
         vk::DeviceQueueCreateFlags(), queueFamilyIndex, 1, &queuePriority
     );
 
-    vk::PhysicalDeviceFeatures deviceFeatures = {};
-    deviceFeatures.samplerAnisotropy = vk::True;
-
     vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {};
     dynamicRenderingFeatures.dynamicRendering = vk::True;
     dynamicRenderingFeatures.sType = 
@@ -136,7 +133,6 @@ vk::Device create_logical_device(
 
     vk::PhysicalDeviceFeatures2 featureChain = {};
     featureChain.sType  = vk::StructureType::ePhysicalDeviceFeatures2;
-    featureChain.features = deviceFeatures;
     featureChain.pNext  = &dynamicRenderingFeatures;
 
     std::vector<const char*> enabledLayers;

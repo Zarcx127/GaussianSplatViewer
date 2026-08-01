@@ -91,10 +91,14 @@ private:
     vk::DescriptorPool m_descriptorPool {};
     std::vector<vk::DescriptorSet> m_swapchainImageDescriptorSets;
 
-    vk::Pipeline m_splatPointPipeline {};
+    vk::Pipeline m_splatGaussianPipeline {};
 
     std::vector<Frame> m_frames;
     std::vector<vk::Fence> m_imagesInFlight;
 };
+
+bool render_resources_context_is_valid(
+    const RenderResourcesContext& context
+);
 
 #endif

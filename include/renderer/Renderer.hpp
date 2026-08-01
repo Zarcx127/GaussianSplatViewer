@@ -69,6 +69,7 @@ private:
 
     uint32_t m_currFrame { 0 };
     uint32_t m_numFrames { 0 };
+    uint32_t m_splatEntryCapacity { 0 };
 
     bool m_rebuildSwapchain { false };
     bool m_initialized { false };

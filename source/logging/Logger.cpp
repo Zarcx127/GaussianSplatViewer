@@ -54,9 +54,6 @@ void Logger::report_version_number(uint32_t version)
 vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
     vk::Instance& instance, std::deque<std::function<void(vk::Instance)>>& deletionQueue
 ) {
-    if(!m_enabled) 
-        return vk::DebugUtilsMessengerEXT();
-
     using Severity = vk::DebugUtilsMessageSeverityFlagBitsEXT;
     using Type = vk::DebugUtilsMessageTypeFlagBitsEXT;
     

@@ -1,0 +1,128 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+layout(
+    local_size_x = 256,
+    local_size_y = 1,
+    local_size_z = 1
+) in;
+
+layout(set = 2, binding = 12, std430) buffer RadixHistogramBuffer
+{
+    uint values[];
+}
+radixHistogramBuffer;
+
+layout(set = 2, binding = 13, std430) writeonly buffer RadixScanBlockSumBuffer
+{
+    uint values[];
+}
+radixScanBlockSumBuffer;
+
+const uint SPLAT_SORT_SCAN_LOCAL_SIZE = 256;
+const uint SPLAT_SORT_RADIX_BUCKET_COUNT = 16;
+
+shared uint scanValues[SPLAT_SORT_SCAN_LOCAL_SIZE];
+
+void main()
+{
+    uint localIndex = gl_LocalInvocationIndex;
+
+    uint blockIndex = gl_WorkGroupID.x;
+    uint bucketIndex = gl_WorkGroupID.y;
+
+    uint workgroupCapacity = (
+        uint(radixHistogramBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint scanBlockCapacityPerBucket = (
+        uint(radixScanBlockSumBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint valueIndex = (
+        (blockIndex * SPLAT_SORT_SCAN_LOCAL_SIZE) +
+        localIndex
+    );
+
+    uint histogramIndex = (
+        (bucketIndex * workgroupCapacity) +
+        valueIndex
+    );
+
+    scanValues[localIndex] = (
+        (valueIndex < workgroupCapacity)
+            ? radixHistogramBuffer.values[histogramIndex]
+            : 0
+    );
+
+    barrier();
+
+    for(
+        uint offset = 1;
+        offset < SPLAT_SORT_SCAN_LOCAL_SIZE;
+        offset <<= 1
+    ) {
+        uint index = (
+            ((localIndex + 1) * offset * 2) -
+            1
+        );
+
+        if(index < SPLAT_SORT_SCAN_LOCAL_SIZE)
+        {
+            scanValues[index] +=
+                scanValues[index - offset];
+        }
+
+        barrier();
+    }
+
+    if(localIndex == 0)
+    {
+        uint finalIndex =
+            SPLAT_SORT_SCAN_LOCAL_SIZE - 1;
+
+        uint blockSumIndex = (
+            (bucketIndex * scanBlockCapacityPerBucket) +
+            blockIndex
+        );
+
+        radixScanBlockSumBuffer.values[blockSumIndex] =
+            scanValues[finalIndex];
+
+        scanValues[finalIndex] = 0;
+    }
+
+    barrier();
+
+    for(
+        uint offset = SPLAT_SORT_SCAN_LOCAL_SIZE >> 1;
+        offset > 0;
+        offset >>= 1
+    ) {
+        uint index = (
+            ((localIndex + 1) * offset * 2) -
+            1
+        );
+
+        if(index < SPLAT_SORT_SCAN_LOCAL_SIZE)
+        {
+            uint leftValue =
+                scanValues[index - offset];
+
+            scanValues[index - offset] =
+                scanValues[index];
+
+            scanValues[index] += leftValue;
+        }
+
+        barrier();
+    }
+
+    if(valueIndex < workgroupCapacity)
+    {
+        radixHistogramBuffer.values[histogramIndex] =
+            scanValues[localIndex];
+    }
+}

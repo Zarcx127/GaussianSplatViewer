@@ -8,22 +8,12 @@
 
 #include "renderer/resources/descriptors/Descriptors.hpp"
 
-#include "renderer/resources/shaders/Shader.hpp"
-
 bool RenderFeatures::build(RenderFeaturesContext& context, const char* splatPath)
 {
     Logger* logger = Logger::get_logger();
 
-    if(
-        !context.logicalDevice ||
-        !context.allocator ||
-        !context.commandPool ||
-        !context.graphicsQueue ||
-        !context.pipelineLayout ||
-        !context.sphericalHarmonicDescriptorSetLayout
-    ) {
+    if(!render_features_context_is_valid(context)) 
         return false;
-    }
 
     PlySplatLoadResult loadResult = load_ply_splat_cloud(splatPath);
     if(!loadResult.success)
@@ -86,23 +76,13 @@ bool RenderFeatures::build(RenderFeaturesContext& context, const char* splatPath
         m_sphericalHarmonicBuffer.buffer.size
     );
 
-    m_backgroundPipeline = make_compute_pipeline(
-        context.logicalDevice,  "shaders/bin/Background.comp.spv", 
-        context.pipelineLayout, m_deletionQueue
+    m_pipelines = build_render_feature_pipeline(
+        context.logicalDevice,
+        context.pipelineLayout,
+        m_deletionQueue
     );
 
-    if(!m_backgroundPipeline)
-    {
-        destroy(context);
-        return false;
-    }
-
-    m_splatCullPipeline = make_compute_pipeline(
-        context.logicalDevice, "shaders/bin/SplatCull.comp.spv",
-        context.pipelineLayout, m_deletionQueue
-    );
-
-    if(!m_splatCullPipeline)
+    if(!render_feature_pipelines_are_valid(m_pipelines))
     {
         destroy(context);
         return false;
@@ -130,16 +110,14 @@ void RenderFeatures::destroy(RenderFeaturesContext& context)
             (m_vmaDeletionQueue.back())(context.allocator);
         
         m_vmaDeletionQueue.pop_back();
-    }
+    };
 
+    m_pipelines = {};
     m_splatBuffer = {};
     m_sphericalHarmonicBuffer = {};
 
     m_descriptorPool = vk::DescriptorPool();
     m_sphericalHarmonicDescriptorSet = vk::DescriptorSet();
-
-    m_backgroundPipeline = vk::Pipeline();
-    m_splatCullPipeline = vk::Pipeline();
 }
 
 RenderFeatureFrameInfo RenderFeatures::frame_info() const
@@ -148,7 +126,31 @@ RenderFeatureFrameInfo RenderFeatures::frame_info() const
         m_splatBuffer,
         m_sphericalHarmonicBuffer,
         m_sphericalHarmonicDescriptorSet,
-        m_backgroundPipeline,
-        m_splatCullPipeline
+        m_pipelines
     };
+}
+
+bool render_features_context_is_valid(
+    const RenderFeaturesContext& context
+) {
+    return (
+        context.logicalDevice &&
+        context.allocator &&
+        context.commandPool &&
+        context.graphicsQueue &&
+        context.pipelineLayout &&
+        context.sphericalHarmonicDescriptorSetLayout
+    );
+}
+
+bool render_feature_frame_info_is_valid(
+    const RenderFeatureFrameInfo& frameInfo
+) {
+    return (
+        frameInfo.splatBuffer.buffer.buffer &&
+        frameInfo.sphericalHarmonicBuffer.buffer.buffer &&
+        frameInfo.sphericalHarmonicDescriptorSet &&
+        (frameInfo.splatBuffer.splatCount > 0) &&
+        render_feature_pipelines_are_valid(frameInfo.pipelines)
+    );
 }

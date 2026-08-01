@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 layout(location = 0) in vec2 gaussianPosition;
 layout(location = 1) flat in vec4 gaussianColor;

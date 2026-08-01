@@ -9,6 +9,8 @@
 #include <vulkan/vulkan.hpp>
 #include <vma/vk_mem_alloc.h>
 
+#include "renderer/resources/pipeline/RenderFeaturePipelines.hpp"
+
 #include "renderer/resources/splats/Splat.hpp"
 
 struct RenderFeaturesContext
@@ -31,8 +33,8 @@ struct RenderFeatureFrameInfo
     const SphericalHarmonicBuffer& sphericalHarmonicBuffer;
     
     vk::DescriptorSet sphericalHarmonicDescriptorSet;
-    vk::Pipeline backgroundPipeline;
-    vk::Pipeline splatCullPipeline;
+    
+    const RenderFeaturePipelines& pipelines;
 };
 
 class RenderFeatures
@@ -56,13 +58,21 @@ private:
     std::deque<std::function<void(VmaAllocator)>> m_vmaDeletionQueue;
 
     SplatBuffer m_splatBuffer;
+
     SphericalHarmonicBuffer m_sphericalHarmonicBuffer;
 
     vk::DescriptorPool m_descriptorPool {};
     vk::DescriptorSet m_sphericalHarmonicDescriptorSet {};
 
-    vk::Pipeline m_backgroundPipeline {};
-    vk::Pipeline m_splatCullPipeline {};
+    RenderFeaturePipelines m_pipelines {};
 };
+
+bool render_features_context_is_valid(
+    const RenderFeaturesContext& context
+);
+
+bool render_feature_frame_info_is_valid(
+    const RenderFeatureFrameInfo& frameInfo
+);
 
 #endif

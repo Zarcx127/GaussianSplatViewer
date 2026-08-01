@@ -6,10 +6,16 @@
 
 #include <glm/glm.hpp>
 
+#include "factory/SplatFrameFactory.hpp"
+
 #include "renderer/resources/descriptors/Descriptors.hpp"
+
 #include "renderer/resources/pipeline/PipelineLayout.hpp"
 
-#include "renderer/RenderCommands.hpp"
+#include "renderer/resources/splats/SplatSort.hpp"
+#include "renderer/resources/splats/SplatFrameDescriptors.hpp"
+
+#include "renderer/FrameCommands.hpp"
 
 namespace
 {
@@ -187,70 +193,11 @@ bool Engine::init(uint32_t width, uint32_t height)
         m_sphericalHarmonicDescriptorSetLayout
     );
 
-    DescriptorSetLayoutBuilder splatFrameLayoutBuilder(
-        m_vulkanContext.logical_device_ref()
+    m_splatFrameDescriptorSetLayout = build_splat_frame_descriptor_set_layout(
+        m_vulkanContext.logical_device_ref(),
+        m_interfaceDeletionQueue
     );
-
-// FLAG ////////
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex
-        ),
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex
-        ),
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex
-        ),
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-    splatFrameLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eCompute,
-        vk::DescriptorType::eStorageBuffer
-    );
-
-////////////////
-
-    m_splatFrameDescriptorSetLayout = 
-        splatFrameLayoutBuilder.build(m_interfaceDeletionQueue);
-    
+        
     if(!m_splatFrameDescriptorSetLayout)
     {
         shutdown();
@@ -260,11 +207,18 @@ bool Engine::init(uint32_t width, uint32_t height)
     m_renderInterface.add_descriptor_set_layout(m_splatFrameDescriptorSetLayout);
 
     m_renderInterface.add_push_constant_range(
+        vk::ShaderStageFlagBits::eVertex,
+        0U, 
+        sizeof(FramePushConstant)
+    );
+
+    m_renderInterface.add_push_constant_range(
+        vk::ShaderStageFlagBits::eCompute,
+        0U, 
         (
-            vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eVertex
-        ),
-        0U, sizeof(FramePushConstant)
+            sizeof(FramePushConstant) +
+            sizeof(SplatSortPushConstant)
+        )
     );
 
     PipelineLayoutBuilder pipelineLayoutBuilder(m_vulkanContext.logical_device_ref());
@@ -331,6 +285,46 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
         return DrawResult::FatalError;
     }
 
+    GpuSplatCounters splatCounters = {};
+    bool readSplatCountersSuccess = read_splat_frame_counters(
+        m_vulkanContext.allocator(),
+        frame.splatResources,
+        splatCounters
+    );
+
+    if(!readSplatCountersSuccess)
+    {
+        m_logger->print("Failed to read splat counters");
+        return DrawResult::FatalError;
+    }
+
+    if(splatCounters.overflowCount > 0)
+    {
+        uint32_t grownCapacity = calculate_grown_splat_entry_capacity(
+            m_vulkanContext.physical_device(),
+            frame.splatResources.entryCapacity,
+            splatCounters.requestedEntryCount
+        );
+
+        if(grownCapacity <= frame.splatResources.entryCapacity) 
+        {
+            m_logger->print("Splat entry capacity cannot grow further");
+            return DrawResult::FatalError;
+        }
+
+        m_logger->print("Growing splat entry capacity");
+
+        m_splatEntryCapacity = grownCapacity;
+
+        destroy_render_resources();
+        if(!init_render_resources(width, height))
+            return DrawResult::FatalError;
+
+        m_currFrame = 0;
+
+        return DrawResult::Skipped;
+    }
+
     uint32_t imageIndex = 0;
     VkResult acquireResult = vkAcquireNextImageKHR(
         static_cast<VkDevice>(device),
@@ -377,8 +371,16 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
     FramePushConstant pushConstants {};
 
     pushConstants.view = m_camera.view_matrix();
-    pushConstants.projection = m_camera.projection_matrix(aspect);
     pushConstants.cameraPosition = glm::vec4(m_camera.position(), 1.0f);
+    
+    glm::mat4 projection = m_camera.projection_matrix(aspect);
+    pushConstants.projectionInfo = glm::vec4(
+        projection[0][0],
+        projection[1][1],
+        projection[2][2],
+        projection[3][2]
+    );
+    
     pushConstants.renderInfo = glm::uvec4(
         renderExtent.width,
         renderExtent.height,
@@ -425,20 +427,17 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
         m_renderResources.depth_image()
     };
 
-    RenderFrameContext renderContext = {
+    FrameCommands FrameCommands(
+        frame.commandBuffer,
         renderTarget,
         frame.splatResources,
         frame.splatFrameDescriptorSet,
         m_renderResources.splat_gaussian_pipeline(),
         m_pipelineLayout,
         featureInfo
-    };
-
-    bool renderSuccessful = record_frame_commands(
-        frame.commandBuffer, renderContext, pushConstants 
     );
 
-    if(!renderSuccessful)
+    if(!FrameCommands.record(pushConstants))
         return DrawResult::FatalError;
     
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eComputeShader;
@@ -534,13 +533,24 @@ bool Engine::init_render_resources(uint32_t width, uint32_t height)
     RenderFeatureFrameInfo featureInfo = m_renderFeatures.frame_info();
 
     uint32_t splatCapacity = featureInfo.splatBuffer.splatCount;
-    uint32_t entryCapacity = splatCapacity;
+
+    if(m_splatEntryCapacity == 0)
+    {
+        m_splatEntryCapacity = calculate_splat_entry_capacity(
+            m_vulkanContext.physical_device(),
+            splatCapacity, 
+            MAX_FRAMES_IN_FLIGHT
+        );
+    }
+
+    if(m_splatEntryCapacity == 0)
+        return false;
 
     RenderResourcesContext context = make_render_resources_context();
 
     return m_renderResources.build(
         context, width, height, MAX_FRAMES_IN_FLIGHT,
-        featureInfo.splatBuffer, entryCapacity
+        featureInfo.splatBuffer, m_splatEntryCapacity
     );
 }
 

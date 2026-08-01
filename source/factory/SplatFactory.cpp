@@ -28,7 +28,7 @@ GraphicsPipelineConfig get_splat_gaussian_pipeline_config()
 {
     GraphicsPipelineConfig pipelineConfig = {};
 
-    pipelineConfig.topology = vk::PrimitiveTopology::eTriangleList;
+    pipelineConfig.topology = vk::PrimitiveTopology::eTriangleStrip;
 
     pipelineConfig.cullMode = vk::CullModeFlagBits::eNone;
     pipelineConfig.frontFace = vk::FrontFace::eCounterClockwise;

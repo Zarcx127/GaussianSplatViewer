@@ -26,6 +26,7 @@ else
 
 $guardSource = $relPath -replace '\\', '/'
 $guardSource = $guardSource -replace '/', '_'
+$guardSource = $relPath -replace '[^a-zA-Z0-9_]', '_'
 
 $guardBuilder = New-Object System.Text.StringBuilder
 $prevWasUnderscore = $false
@@ -96,4 +97,4 @@ else
 }
 
 $target = "$FilePath.$Type"
-Set-Content -Path $target -Value $content -Encoding utf8
+Set-Content -Path $target -Value $content -Encoding ascii

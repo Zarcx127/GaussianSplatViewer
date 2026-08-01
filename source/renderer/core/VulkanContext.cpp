@@ -27,7 +27,7 @@ bool VulkanContext::build(GLFWwindow* window, const char* applicationName)
 #ifdef DEBUG
     
     m_debugMessenger = logger->make_debug_messenger(m_instance, m_instanceDeletionQueue);
-    if(!m_debugMessenger && logger->is_enabled())
+    if(!m_debugMessenger)
     {
         destroy();
         return false;

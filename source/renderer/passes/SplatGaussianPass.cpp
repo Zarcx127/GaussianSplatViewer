@@ -26,6 +26,6 @@ void record_splat_gaussian_pass(
         resources.drawCommand.buffer,
         0,
         1,
-        sizeof(GpuSplatDrawCommand)
+        sizeof(vk::DrawIndirectCommand)
     );
 }

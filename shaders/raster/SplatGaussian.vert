@@ -1,21 +1,19 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
-struct ProjectedSplat
-{
-    vec4 clipCenter;
-    vec4 ellipseAxes;
-    vec4 color;
-};
+#include "SplatStructures.glsl"
 
 layout(set = 2, binding = 1, std430) readonly buffer ProjectedSplatBuffer
 {
     ProjectedSplat splats[];
-} projectedSplatBuffer;
+} 
+projectedSplatBuffer;
 
-layout(set = 2, binding = 5, std430) readonly buffer EntrySplatIndexBuffer
+layout(set = 2, binding = 2, std430) readonly buffer VisibleSplatIndexBuffer
 {
     uint indices[];
-} entrySplatIndexBuffer;
+}
+visibleSplatIndexBuffer;
 
 layout(location = 0) out vec2 gaussianPosition;
 layout(location = 1) flat out vec4 gaussianColor;
@@ -23,10 +21,11 @@ layout(location = 1) flat out vec4 gaussianColor;
 layout(push_constant) uniform PushConstants
 {
     mat4 view;
-    mat4 projection;
     vec4 cameraPosition;
+    vec4 projectionInfo;
     uvec4 renderInfo;
-} pushConstants;
+}
+pushConstants;
 
 const float SIGMA_EXTENT = 3.0;
 
@@ -34,7 +33,7 @@ vec2 quad_corner(uint vertexIndex);
 
 void main()
 {
-    uint splatIndex = entrySplatIndexBuffer.indices[gl_InstanceIndex];
+    uint splatIndex = visibleSplatIndexBuffer.indices[gl_InstanceIndex];
     ProjectedSplat splat = projectedSplatBuffer.splats[splatIndex];
 
     vec2 corner = quad_corner(gl_VertexIndex);
@@ -54,13 +53,11 @@ void main()
 
 vec2 quad_corner(uint vertexIndex)
 {
-    const vec2 corners[6] = vec2[6](
-        vec2(-1.0, -1.0),
+    const vec2 corners[4] = vec2[4](
+        vec2( 1.0,  1.0),
+        vec2(-1.0,  1.0),
         vec2( 1.0, -1.0),
-        vec2( 1.0,  1.0),
-        vec2(-1.0, -1.0),
-        vec2( 1.0,  1.0),
-        vec2(-1.0,  1.0)
+        vec2(-1.0, -1.0)
     );
 
     return corners[vertexIndex];

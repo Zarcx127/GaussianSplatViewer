@@ -119,6 +119,18 @@ bool get_ply_spherical_harmonic_location(
     return (component < 3);
 }
 
+glm::vec3 decode_ply_spherical_harmonic_dc_color(
+    const glm::vec3& coefficient
+) {
+    constexpr float SH0 = 0.28209479177387814f;
+
+    return glm::clamp(
+        (glm::vec3(0.5f) + (SH0 * coefficient)),
+        glm::vec3(0.0f),
+        glm::vec3(1.0f)
+    );
+}
+
 namespace
 {
     bool parse_spherical_harmonic_index(const std::string& name, uint32_t& index)

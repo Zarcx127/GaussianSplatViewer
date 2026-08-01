@@ -1,0 +1,100 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+layout(
+    local_size_x = 256,
+    local_size_y = 1,
+    local_size_z = 1
+) in;
+
+layout(set = 2, binding = 12, std430) buffer RadixHistogramBuffer
+{
+    uint values[];
+}
+radixHistogramBuffer;
+
+layout(set = 2, binding = 13, std430) buffer RadixScanBlockSumBuffer
+{
+    uint values[];
+}
+radixScanBlockSumBuffer;
+
+layout(push_constant) uniform SortAddOffsetsPushConstants
+{
+    layout(offset = 112) uint valueCount;
+
+    uint targetOffset;
+    uint blockOffset;
+    uint targetBuffer;
+}
+sortAddOffsetsPushConstants;
+
+const uint SPLAT_SORT_SCAN_LOCAL_SIZE = 256;
+const uint SPLAT_SORT_RADIX_BUCKET_COUNT = 16;
+
+const uint SPLAT_SORT_TARGET_HISTOGRAMS = 0;
+const uint SPLAT_SORT_TARGET_BLOCK_SUMS = 1;
+
+void main()
+{
+    uint bucketIndex = gl_WorkGroupID.y;
+
+    uint valueIndex = (
+        (gl_WorkGroupID.x * SPLAT_SORT_SCAN_LOCAL_SIZE) +
+        gl_LocalInvocationIndex
+    );
+
+    if(valueIndex >= sortAddOffsetsPushConstants.valueCount)
+        return;
+
+    uint blockIndex = (
+        valueIndex /
+        SPLAT_SORT_SCAN_LOCAL_SIZE
+    );
+
+    uint blockCapacityPerBucket = (
+        uint(radixScanBlockSumBuffer.values.length()) /
+        SPLAT_SORT_RADIX_BUCKET_COUNT
+    );
+
+    uint blockBucketBase = (
+        bucketIndex *
+        blockCapacityPerBucket
+    );
+
+    uint offsetValue =
+        radixScanBlockSumBuffer.values[
+            blockBucketBase +
+            sortAddOffsetsPushConstants.blockOffset +
+            blockIndex
+        ];
+
+    if(
+        sortAddOffsetsPushConstants.targetBuffer ==
+        SPLAT_SORT_TARGET_HISTOGRAMS
+    ) {
+        uint histogramCapacityPerBucket = (
+            uint(radixHistogramBuffer.values.length()) /
+            SPLAT_SORT_RADIX_BUCKET_COUNT
+        );
+
+        uint histogramIndex = (
+            (bucketIndex * histogramCapacityPerBucket) +
+            valueIndex
+        );
+
+        radixHistogramBuffer.values[histogramIndex] +=
+            offsetValue;
+    }
+    else
+    {
+        uint targetIndex = (
+            blockBucketBase +
+            sortAddOffsetsPushConstants.targetOffset +
+            valueIndex
+        );
+
+        radixScanBlockSumBuffer.values[targetIndex] +=
+            offsetValue;
+    }
+}

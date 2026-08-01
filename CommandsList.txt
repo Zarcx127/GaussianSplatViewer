@@ -38,39 +38,53 @@ make clean_shaders
 make delete_exe
 	deletes the main executable
 
-make create [type] [path_to_file]/[file_name]
-    creates in [path_to_file] either:
+make create [option] [path_to_file]/[file_name]
+    creates in /(source/include)/[path_to_file] either:
 		1. [file_name].hpp
 		2. [file_name].cpp
 		3. both a [file_name].hpp and [file_name].cpp
 
-	the respective types are:
+	the respective options are:
 		1. header
 		2. source
 		3. pair
 
 	*sub folder will be created if it does not exist	
 	e.g. to create Example.hpp and Example.cpp 
-		 in sub folder of  src/tmp/ and src/tmp/
+		 in sub folder of  source/tmp/ and source/tmp/
 		 type "make create pair tmp/Example" and 
 		 both /include/tmp/Example.hpp and
-		 /src/tmp/Example.cpp will be created
+		 /source/tmp/Example.cpp will be created
 
-make create [type] [path_to_file]/[file_name]
-    deletes from [path_to_file] either:
+make delete [option] [path_to_file]/[file_name]
+    deletes from /(source/include)/[path_to_file] either:
 		1. [file_name].hpp
 		2. [file_name].cpp
 		3. both a [file_name].hpp and [file_name].cpp
 
 
-	the respective types are:
+	the respective options are:
 		1. header
 		2. source
 		3. pair
 	
 	*sub folder will be deleted if it is empty
 	e.g. to delete Example.hpp and Example.cpp 
-		 in sub folder of  src/tmp/ and src/tmp/
+		 in sub folder of  source/tmp/ and source/tmp/
 		 type "make delete pair tmp/Example" and 
 		 both /include/tmp/Example.hpp and
-		 /src/tmp/Example.cpp will be deleted
+		 /source/tmp/Example.cpp will be deleted
+
+make create_shader [option] [path_to_file]/[file_name].[file_type]
+    [option]=source 
+	creates [file_name].[file_type] in 
+	/shader/[path_to_file]
+	*[path_to_file] must not contain "include"
+	
+	[option]=header
+	creates [file_name].[file_type] in
+	/shader/include/[path_to_file]
+
+make delete_header [path_to_file]/[file_name]
+	deletes [file_name].[file_type] in 
+	/shader/[path_to_file]

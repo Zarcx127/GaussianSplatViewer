@@ -10,7 +10,10 @@ CURR_DIR := $(subst \,/,$(abspath .))/
 SHD_DIR := $(CURR_DIR)shaders/
 INC_DIR := $(CURR_DIR)include/
 SRC_DIR := $(CURR_DIR)source/
+GPU_DIR := $(CURR_DIR)gpu/
 OBJ_DIR := $(CURR_DIR)obj/$(mode)/
+
+SHD_INC_DIR := $(SHD_DIR)include/
 
 MODE_FILE := $(CURR_DIR).lastMode
 LAST_MODE := $(strip $(shell if exist "$(MODE_FILE)" type "$(MODE_FILE)"))
@@ -27,21 +30,31 @@ FLAGS_OBJ := -std=c++17 -O2 -Werror -MMD -MP \
 	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 
 GLSLC = glslc
-FLAGS_SPV = -MD
+FLAGS_SPV = -MD -I"$(SHD_INC_DIR)"
 
-INCLUDE := -I$(INC_DIR) -I$(subst \,/,$(VULKAN_SDK))/Include
+INCLUDE := -I"$(INC_DIR)" -I"$(subst \,/,$(VULKAN_SDK))/Include"
 FLAGS_EXE := -std=c++17 -O2 \
 	-L$(subst \,/,$(VULKAN_SDK))/Lib \
 	-static -lvulkan-1 -lglfw3 -lgdi32
 
-SRCs_RAW := $(shell powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp | ForEach-Object { $$_.FullName }")
-SHADERS_RAW := $(shell powershell -Command "Get-ChildItem -File $(SHD_DIR) | ForEach-Object { $$_.FullName }")
+SRCs_RAW := $(shell \
+	powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp \
+	| ForEach-Object { $$_.FullName }")
+
+SHADERS_RAW := $(shell \
+	powershell -Command "Get-ChildItem -Path '$(SHD_DIR)' -Recurse -File \
+	| Where-Object { \
+		(($$_.FullName -replace '\\','/') -notlike '$(SHD_INC_DIR)*') \
+	} \
+	| ForEach-Object { $$_.FullName }")
 
 SRCs := $(subst \,/,$(SRCs_RAW))
 SHADERS := $(subst \,/,$(SHADERS_RAW))
 
 OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
-SPVs := $(addsuffix .spv,$(addprefix $(SHD_DIR)bin/,$(notdir $(SHADERS))))
+
+SHADER_PATHS := $(patsubst $(SHD_DIR)%,%,$(SHADERS))
+SPVs := $(addprefix $(GPU_DIR),$(addsuffix .spv,$(SHADER_PATHS)))
 
 OBJ_DEPs := $(OBJs:.o=.d)
 SPV_DEPs := $(addsuffix .d,$(SPVs))
@@ -49,7 +62,7 @@ SPV_DEPs := $(addsuffix .d,$(SPVs))
 ifeq ($(mode), debug)
 	FLAGS_OBJ += -DDEBUG
 else ifeq ($(mode), release)
-	FLAGS_OBJ += -DRELEASE
+	FLAGS_OBJ += -DRELEASE -DNDEBUG
 	FLAGS_EXE += -mwindows
 else
     $(error Unknown build mode)
@@ -83,9 +96,9 @@ PSFLAGS := -ExecutionPolicy Bypass
 
 .PHONY: reload clean_run build run release 
 .PHONY: clean clean_shaders clean_obj delete_exe
-.PHONY: create delete
+.PHONY: create delete create_shader delete_shader
 
-define CREATE_FILE
+define CREATE_CODE
 	$(eval EXT := $(1))
 	$(eval DIR := $(2))
 	$(eval NAME := $(3))
@@ -95,6 +108,18 @@ define CREATE_FILE
 	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(DIR)$(NAME)" -Type "$(EXT)"
 	
 	@echo $(NAME).$(EXT) created
+endef
+
+define CREATE_SHADER
+	$(eval TYPE := $(1))
+	$(eval DIR := $(2))
+	$(eval NAME := $(3))
+
+	@if exist "$(DIR)$(NAME)" (echo ERROR: $(DIR)$(NAME) already exists! & exit 1)
+	@if not exist "$(DIR)$(dir $(NAME))" mkdir "$(DIR)$(dir $(NAME))"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddShader.ps1" -FilePath "$(DIR)$(NAME)" -Type "$(TYPE)"
+
+	@echo $(NAME) created
 endef
 
 define DELETE_FILE
@@ -151,23 +176,27 @@ release:
 
 	@$(MAKE_NP) build mode=release
 
-	@if exist "$(CURR_DIR)tmp" powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)tmp' -Recurse -Force"
-	@mkdir "$(CURR_DIR)tmp/shaders/bin/"
-
-	@powershell $(PSFLAGS) -Command "Copy-Item -LiteralPath '$(CURR_DIR)$(EXE)' -Destination '$(CURR_DIR)tmp/'"
-	@for %%F in ($(foreach spv,$(SPVs),"$(spv)")) do ( \
-		powershell $(PSFLAGS) -Command "Copy-Item -LiteralPath '%%~F' -Destination '$(CURR_DIR)tmp/shaders/bin/'" || \
-		exit 1 \
+	@if exist "$(CURR_DIR)tmp" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)tmp' -Recurse -Force" \
 	)
 	
-	@powershell $(PSFLAGS) -Command "\
+	@mkdir "$(CURR_DIR)tmp"
+
+	@powershell $(PSFLAGS) -Command " \
+		Copy-Item -LiteralPath '$(CURR_DIR)$(EXE)' -Destination '$(CURR_DIR)tmp/'"
+
+	@powershell $(PSFLAGS) -Command " \
+		Copy-Item -LiteralPath '$(GPU_DIR)' -Destination '$(CURR_DIR)tmp/' -Recurse; \
+		Get-ChildItem -Path '$(CURR_DIR)tmp/gpu' -Recurse -File -Filter '*.d' | Remove-Item -Force"
+	
+	@powershell $(PSFLAGS) -Command " \
 		$$ProgressPreference = 'SilentlyContinue'; \
 		Compress-Archive -Path '$(CURR_DIR)tmp/*' -DestinationPath '$(CURR_DIR)$(RELEASE)' -Force; \
 		Remove-Item '$(CURR_DIR)tmp' -Recurse -Force"
 
 	@echo $(RELEASE) is ready to export
 
-$(SHD_DIR)bin/%.spv: $(SHD_DIR)% 
+$(GPU_DIR)%.spv: $(SHD_DIR)% 
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
 	$(GLSLC) $(FLAGS_SPV) "$<" -o "$@"
 
@@ -203,9 +232,9 @@ clean_obj:
 	@echo $(mode) object files have been deleted
 
 clean_shaders:
-	@if exist "$(SHD_DIR)bin/" powershell $(PSFLAGS) -Command "Remove-Item '$(SHD_DIR)bin/' -Recurse -Force"
+	@if exist "$(GPU_DIR)" powershell $(PSFLAGS) -Command "Remove-Item '$(GPU_DIR)' -Recurse -Force"
 
-	@echo shaders have been deleted
+	@echo SPVs have been deleted
 
 delete_exe: 
 	@if exist "$(CURR_DIR)$(EXE)" ( \
@@ -228,8 +257,8 @@ create:
 
 	@if "$(TARGET_EXT)" == "" (echo ERROR: Unknown option: $(TYPE) & exit 1)
 
-	$(if $(filter hpp,$(TARGET_EXT)),$(call CREATE_FILE,hpp,$(INC_DIR),$(FILE)))
-	$(if $(filter cpp,$(TARGET_EXT)),$(call CREATE_FILE,cpp,$(SRC_DIR),$(FILE)))
+	$(if $(filter hpp,$(TARGET_EXT)),$(call CREATE_CODE,hpp,$(INC_DIR),$(FILE)))
+	$(if $(filter cpp,$(TARGET_EXT)),$(call CREATE_CODE,cpp,$(SRC_DIR),$(FILE)))
 	
 delete:
 	@if not "$(word 4, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
@@ -249,7 +278,43 @@ delete:
 	$(if $(filter hpp,$(TARGET_EXT)),$(call DELETE_FILE,hpp,$(INC_DIR),$(FILE)))
 	$(if $(filter cpp,$(TARGET_EXT)),$(call DELETE_FILE,cpp,$(SRC_DIR),$(FILE)))
 
-$(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS)):
+create_shader:
+	@if not "$(word 4, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
+	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: Shader type not specified! & exit 1)
+	@if "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: Shader name not specified! & exit 1)
+
+	$(eval TYPE := $(word 2, $(MAKECMDGOALS)))
+	$(eval FILE := $(word 3, $(MAKECMDGOALS)))
+	$(eval NORMALIZED_FILE := $(subst \,/,$(FILE)))
+
+	@if "$(TYPE)" == "source" if not "$(filter include/%,$(NORMALIZED_FILE))" == "" ( \
+		echo ERROR: Shader sources cannot be created inside shaders/include/ & exit 1 \
+	)
+
+	$(eval TARGET_DIR :=)
+	$(if $(filter source,$(TYPE)),$(eval TARGET_DIR := $(SHD_DIR)))
+	$(if $(filter header,$(TYPE)),$(eval TARGET_DIR := $(SHD_INC_DIR)))
+
+	@if "$(TARGET_DIR)" == "" (echo ERROR: Unknown option: $(TYPE) & exit 1)
+
+	$(call CREATE_SHADER,$(TYPE),$(TARGET_DIR),$(FILE))
+
+delete_shader:
+	@if not "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
+	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: Shader name not specified! & exit 1)
+
+	$(eval FILE := $(word 2, $(MAKECMDGOALS)))
+	$(eval EXT := $(patsubst .%,%,$(suffix $(FILE))))
+	$(eval NAME := $(basename $(FILE)))
+
+	@if "$(EXT)" == "" (echo ERROR: Shader file type not specified! & exit 1)
+
+	$(call DELETE_FILE,$(EXT),$(SHD_DIR),$(NAME))
+
+
+CMD_ARGS := $(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS))
+.PHONY: $(CMD_ARGS)
+$(CMD_ARGS):
 	@:
 
 -include $(OBJ_DEPs) $(SPV_DEPs)

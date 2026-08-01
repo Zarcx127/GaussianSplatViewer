@@ -29,7 +29,7 @@ private:
     float m_nearPlane { 0.1f };
     float m_farPlane { 1000.0f };
 
-    float m_moveSpeed { 3.0f };
+    float m_moveSpeed { 2.5f };
     float m_mouseSensitivity { 0.1f };
 
     glm::vec3 forward_direction() const;

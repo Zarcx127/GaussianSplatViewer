@@ -10,6 +10,10 @@
 
 #include "renderer/resources/shaders/Shader.hpp"
 
+#include "renderer/resources/splats/SplatFrameDescriptors.hpp"
+
+#include "renderer/ShaderPaths.hpp"
+
 bool RenderResources::build(
     RenderResourcesContext& context,
     uint32_t width,
@@ -21,25 +25,13 @@ bool RenderResources::build(
     uint32_t splatCapacity = splatBuffer.splatCount;
 
     if(
-        !context.splatFrameDescriptorSetLayout ||
         !splatBuffer.buffer.buffer ||
         (width == 0) || 
         (height == 0) || 
         (framesInFlight == 0) ||
         (entryCapacity == 0) ||
-        (splatCapacity == 0)
-    ) {
-        return false;
-    }
-
-    if(
-        !context.logicalDevice ||
-        !context.physicalDevice ||
-        !context.surface ||
-        !context.allocator ||
-        !context.commandPool ||
-        !context.graphicsQueue ||
-        !context.pipelineLayout
+        (splatCapacity == 0) ||
+        !render_resources_context_is_valid(context)
     ) {
         return false;
     }
@@ -72,7 +64,7 @@ bool RenderResources::build(
 
     descriptorPoolBuilder.add_entry(
         vk::DescriptorType::eStorageBuffer,
-        (splatFrameDescriptorCount * 9)
+        (splatFrameDescriptorCount * SPLAT_FRAME_BINDING_COUNT)
     );
 
     m_descriptorPool = descriptorPoolBuilder.build(
@@ -82,12 +74,6 @@ bool RenderResources::build(
 
     m_swapchainImageDescriptorSets.clear();
     m_swapchainImageDescriptorSets.resize(m_swapchain.imageViews.size());
-
-    if(context.renderInterface.get_descriptor_set_layouts().empty())
-    {
-        destroy(context);
-        return false;
-    }
 
     for(uint32_t i = 0; i < m_swapchain.imageViews.size(); i++)
     {
@@ -123,10 +109,10 @@ bool RenderResources::build(
     }
 
     GraphicsPipelineConfig splatPipelineConfig = get_splat_gaussian_pipeline_config();
-    m_splatPointPipeline = make_graphics_pipeline(
+    m_splatGaussianPipeline = make_graphics_pipeline(
         context.logicalDevice,
-        "shaders/bin/SplatGaussian.vert.spv",
-        "shaders/bin/SplatGaussian.frag.spv",
+        shader::splatGaussianVertex,
+        shader::splatGaussianFragment,
         splatPipelineConfig,
         context.pipelineLayout,
         m_swapchain.format.format,
@@ -134,7 +120,7 @@ bool RenderResources::build(
         m_deletionQueue
     );
 
-    if(!m_splatPointPipeline)
+    if(!m_splatGaussianPipeline)
     {
         destroy(context);
         return false;
@@ -163,6 +149,23 @@ bool RenderResources::build(
         return false;
     }
 
+    uint32_t tileCountX = (
+        (m_swapchain.extent.width + SPLAT_TILE_SIZE - 1) /
+        SPLAT_TILE_SIZE
+    );
+
+    uint32_t tileCountY = (
+        (m_swapchain.extent.height + SPLAT_TILE_SIZE - 1) /
+        SPLAT_TILE_SIZE
+    );
+
+    uint32_t tileCapacity = (tileCountX * tileCountY);
+    if(tileCapacity == 0)
+    {
+        destroy(context);
+        return false;
+    }
+
     m_frames.reserve(framesInFlight);
     for(uint32_t i = 0; i < framesInFlight; i++)
     {
@@ -180,10 +183,11 @@ bool RenderResources::build(
             context.allocator,
             splatCapacity,
             entryCapacity,
+            tileCapacity,
             m_vmaDeletionQueue
         );
 
-        if(!splatResources.projectedSplats.buffer)
+        if(!splat_frame_resources_are_valid(splatResources))
         {
             destroy(context);
             return false;
@@ -201,60 +205,15 @@ bool RenderResources::build(
             return false;
         }
 
-/// FLAG ///
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatBuffer.buffer.buffer, 0, splatBuffer.buffer.size, 0
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.projectedSplats.buffer,
-            0, splatResources.projectedSplats.size, 1
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.visibleSplatIndices.buffer,
-            0, splatResources.visibleSplatIndices.size, 2
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.sortKeys[0].buffer,
-            0, splatResources.sortKeys[0].size, 3
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.sortKeys[1].buffer,
-            0, splatResources.sortKeys[1].size, 4
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.entrySplatIndices[0].buffer,
-            0, splatResources.entrySplatIndices[0].size, 5
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.entrySplatIndices[1].buffer,
-            0, splatResources.entrySplatIndices[1].size, 6
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.counters.buffer,
-            0, splatResources.counters.size, 7
-        );
-
-        write_storage_buffer_descriptor(
-            context.logicalDevice, splatFrameDescriptorSet,
-            splatResources.drawCommand.buffer,
-            0, splatResources.drawCommand.size, 8
-        );
-////////
+        if(!write_splat_frame_descriptor_set(
+            context.logicalDevice,
+            splatFrameDescriptorSet,
+            splatBuffer,
+            splatResources
+        )) {
+            destroy(context);
+            return false;
+        }
 
         m_frames.emplace_back(
             context.logicalDevice, commandBuffer, 
@@ -301,7 +260,7 @@ void RenderResources::destroy(RenderResourcesContext& context)
     }
 
     m_descriptorPool = vk::DescriptorPool();
-    m_splatPointPipeline = vk::Pipeline();
+    m_splatGaussianPipeline = vk::Pipeline();
     m_swapchain = {};
     m_depthImage = {};
 }
@@ -338,7 +297,7 @@ uint32_t RenderResources::color_image_view_count() const
 
 vk::Pipeline RenderResources::splat_gaussian_pipeline() const
 {
-    return m_splatPointPipeline;
+    return m_splatGaussianPipeline;
 }
 
 const AllocatedImage& RenderResources::depth_image() const
@@ -374,4 +333,19 @@ vk::Fence& RenderResources::image_in_flight(uint32_t imageIndex)
 uint32_t RenderResources::image_in_flight_count() const
 {
     return static_cast<uint32_t>(m_imagesInFlight.size());
+}
+
+bool render_resources_context_is_valid(
+    const RenderResourcesContext& context
+) {
+    return (
+        context.logicalDevice &&
+        context.physicalDevice &&
+        context.surface &&
+        context.allocator &&
+        context.commandPool &&
+        context.graphicsQueue &&
+        context.pipelineLayout &&
+        !context.renderInterface.get_descriptor_set_layouts().empty()
+    );
 }

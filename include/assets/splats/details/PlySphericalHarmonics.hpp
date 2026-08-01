@@ -7,6 +7,8 @@
 #include <string>
 #include <cstdint>
 
+#include <glm/glm.hpp>
+
 #include "assets/ply/PlyReader.hpp"
 
 struct PlySphericalHarmonicLayout
@@ -28,6 +30,10 @@ bool get_ply_spherical_harmonic_location(
     const uint32_t& coefficientCount,
     uint32_t& coefficient,
     uint32_t& component
+);
+
+glm::vec3 decode_ply_spherical_harmonic_dc_color(
+    const glm::vec3& coefficient
 );
 
 #endif

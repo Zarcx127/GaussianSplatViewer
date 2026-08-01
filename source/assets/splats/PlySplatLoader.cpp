@@ -24,7 +24,7 @@ namespace
         const char*& error
     );
 
-    void finalize_splat_color(
+    void resolve_splat_base_color(
         SplatVertex& splat,
         const glm::vec3& rgb,
         const std::vector<glm::vec3>& sphericalHarmonics,
@@ -113,7 +113,7 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
             -splat.position.y
         );
 
-        finalize_splat_color(splat, rgb, sphericalHarmonics, result.cloud.info);
+        resolve_splat_base_color(splat, rgb, sphericalHarmonics, result.cloud.info);
 
         result.cloud.sphericalHarmonics.insert(
             result.cloud.sphericalHarmonics.end(),
@@ -204,7 +204,7 @@ namespace
         return true;
     }
 
-    void finalize_splat_color(
+    void resolve_splat_base_color(
         SplatVertex& splat,
         const glm::vec3& rgb,
         const std::vector<glm::vec3>& sphericalHarmonics,
@@ -218,15 +218,8 @@ namespace
 
         if(info.hasDcColor)
         {
-            // 0th order Spherical-harmonic = 1/(2*sqrt(pi)) 
-            constexpr float SH0 = 0.28209479177387814f;
-
-            const glm::vec3& dc = sphericalHarmonics[0];
-
-            splat.color = glm::vec3(
-                clamp01(0.5f + (SH0 * dc.x)),
-                clamp01(0.5f + (SH0 * dc.y)),
-                clamp01(0.5f + (SH0 * dc.z))
+            splat.color = decode_ply_spherical_harmonic_dc_color(
+                sphericalHarmonics[0]
             );
 
             return;

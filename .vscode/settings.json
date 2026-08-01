@@ -101,22 +101,25 @@
     "C_Cpp.codeAnalysis.runAutomatically": false,
     "C_Cpp.codeAnalysis.clangTidy.enabled": false,
 
-    "C_Cpp.default.browse.limitSymbolsToIncludedHeaders": true,
-
-    "C_Cpp.intelliSenseCacheSize": 8192,
-    "C_Cpp.intelliSenseMemoryLimit": 4096,
+    "C_Cpp.intelliSenseCacheSize": 0,
+    "C_Cpp.intelliSenseMemoryLimit": 8192,
     "C_Cpp.workspaceParsingPriority": "high",
 
+    "shader-validator.includes": [
+        "${workspaceFolder}/shaders/include"
+    ],
+    
     "search.useParentIgnoreFiles": false,
     "search.quickOpen.includeHistory": false,
     "search.exclude": {
         "**/obj/**": true,
-        "**/shaders/bin/**": true
+        "**/gpu/**": true,
+        "**/assets/**": true
     },
 
     "explorer.fileNesting.enabled": true,
     "explorer.fileNesting.expand": false,
     "explorer.fileNesting.patterns": {
         "Makefile": ".lastMode"
-    }
+    },
 }

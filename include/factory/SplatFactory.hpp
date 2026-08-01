@@ -3,7 +3,6 @@
 #ifndef FACTORY_SPLAT_FACTORY_H
 #define FACTORY_SPLAT_FACTORY_H
 
-#include <array>
 #include <deque>
 #include <functional>
 

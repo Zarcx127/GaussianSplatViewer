@@ -5,6 +5,7 @@
 
 #include <deque>
 #include <vector>
+#include <cstdint>
 #include <functional>
 
 #include <vulkan/vulkan.hpp>
@@ -14,9 +15,17 @@ class DescriptorSetLayoutBuilder
 public:
     DescriptorSetLayoutBuilder(vk::Device& device);
 
-    vk::DescriptorSetLayout build(std::deque<std::function<void(vk::Device)>>& deletionQueue);
+    vk::DescriptorSetLayout build(
+        std::deque<std::function<void(vk::Device)>>& deletionQueue
+    );
 
     void add_entry(vk::ShaderStageFlags stage, vk::DescriptorType type);
+    
+    void add_entry(
+        uint32_t binding,
+        vk::ShaderStageFlags stage,
+        vk::DescriptorType type
+    );
 
 private:
     vk::Device* m_device;
@@ -31,9 +40,15 @@ class DescriptorPoolBuilder
 public:
     DescriptorPoolBuilder(vk::Device& device);
 
-    vk::DescriptorPool build(uint32_t descriptorSetCount, std::deque<std::function<void(vk::Device)>>& deletionQueue);
+    vk::DescriptorPool build(
+        uint32_t descriptorSetCount, 
+        std::deque<std::function<void(vk::Device)>>& deletionQueue
+    );
 
-    void add_entry(vk::DescriptorType bindingType, uint32_t descriptorCount);
+    void add_entry(
+        vk::DescriptorType bindingType, 
+        uint32_t descriptorCount
+    );
 
 private:
     vk::Device* m_device;
