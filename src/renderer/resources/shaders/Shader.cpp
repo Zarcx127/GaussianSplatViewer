@@ -1,151 +1,241 @@
 #include "renderer/resources/shaders/Shader.hpp"
 
-#include <cstdint>
 #include <array>
+#include <vector>
 
 #include "logging/Logger.hpp"
 
 #include "backend/Utils.hpp"
 
-std::vector<vk::ShaderEXT> make_shader_object(
-    vk::Device device, 
-    const char* vertexFileName, 
-    const char* fragmentFileName, 
-    const ShaderInterface& shaderInterface,
-    std::deque<std::function<void(vk::Device)>>& deletionQueue
-) {
-    Logger* logger = Logger::get_logger();
-
-    const std::vector<vk::DescriptorSetLayout>& setLayouts =
-        shaderInterface.get_descriptor_set_layouts();
-    
-    const std::vector<vk::PushConstantRange>& pushRanges =
-        shaderInterface.get_push_constant_ranges();
-
-    vk::ShaderCreateFlagsEXT flags = vk::ShaderCreateFlagBitsEXT::eLinkStage;
-    vk::ShaderStageFlags nextStage = vk::ShaderStageFlagBits::eFragment;
-    
-    vk::ShaderCodeTypeEXT codeType = vk::ShaderCodeTypeEXT::eSpirv;
-    const char* pName = "main";
-
-    std::vector<uint32_t> vertexSrc = utils::read_file(vertexFileName);
-    vk::ShaderCreateInfoEXT vertexInfo = vk::ShaderCreateInfoEXT(
-        flags,
-        vk::ShaderStageFlagBits::eVertex,
-        nextStage,
-        codeType,
-        vertexSrc.size() * sizeof(uint32_t),
-        vertexSrc.data(),
-        pName
-    );
-
-    vertexInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    vertexInfo.pSetLayouts = setLayouts.data();
-    vertexInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
-    vertexInfo.pPushConstantRanges = pushRanges.data();
-
-    nextStage = {};
-
-    std::vector<uint32_t> fragmentSrc = utils::read_file(fragmentFileName);
-    vk::ShaderCreateInfoEXT fragmentInfo = vk::ShaderCreateInfoEXT(
-        flags,
-        vk::ShaderStageFlagBits::eFragment,
-        nextStage,
-        codeType,
-        fragmentSrc.size() * sizeof(uint32_t),
-        fragmentSrc.data(),
-        pName
-    );
-
-    fragmentInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    fragmentInfo.pSetLayouts = setLayouts.data();
-    fragmentInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
-    fragmentInfo.pPushConstantRanges = pushRanges.data();
-
-    std::vector<vk::ShaderCreateInfoEXT> shaderInfo = {
-        vertexInfo, fragmentInfo
-    };
-
-    vk::ResultValue<std::vector<vk::ShaderEXT>> createShadersAttempt =
-        device.createShadersEXT(shaderInfo);
-
-    if(createShadersAttempt.result != vk::Result::eSuccess)
-    {
-        logger->print("Failed to create shader object");
-        return std::vector<vk::ShaderEXT>{};
-    }
-
-    logger->print("Created vertex shader");
-    logger->print("Created fragment shader");
-
-    std::vector<vk::ShaderEXT> shaders = createShadersAttempt.value;
-    
-    vk::ShaderEXT vertexShader = shaders[0];
-    deletionQueue.push_back(
-        [logger, vertexShader] (vk::Device device)->void {
-            device.destroyShaderEXT(vertexShader);
-            logger->print("Deleted vertex shader");
-        }
-    );
-    
-    vk::ShaderEXT fragmentShader = shaders[1];
-    deletionQueue.push_back(
-        [logger, fragmentShader] (vk::Device device)->void {
-            device.destroyShaderEXT(fragmentShader);
-            logger->print("Deleted fragment shader");
-        }
-    );
-
-    return shaders;
+namespace
+{
+    vk::ShaderModule make_shader_module(vk::Device device, const char* fileName);
 }
 
-vk::ShaderEXT make_compute_shader(
-    vk::Device device, 
-    const char* computeFileName, 
-    const ShaderInterface& shaderInterface,
+vk::Pipeline make_compute_pipeline(
+    vk::Device device,
+    const char* computeFileName,
+    vk::PipelineLayout pipelineLayout,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     Logger* logger = Logger::get_logger();
 
-    const std::vector<vk::DescriptorSetLayout>& setLayouts =
-        shaderInterface.get_descriptor_set_layouts();
-    
-    const std::vector<vk::PushConstantRange>& pushRanges =
-        shaderInterface.get_push_constant_ranges();
+    vk::ShaderModule computeModule = make_shader_module(device, computeFileName);
+    if(!computeModule)
+        return vk::Pipeline();
 
-    vk::ShaderCodeTypeEXT codeType = vk::ShaderCodeTypeEXT::eSpirv;
-    const char* pName = "main";
-    
-    std::vector<uint32_t> srcCode = utils::read_file(computeFileName);
-    vk::ShaderCreateInfoEXT shaderInfo = {};
+    vk::PipelineShaderStageCreateInfo stageInfo = {};
+    stageInfo.stage = vk::ShaderStageFlagBits::eCompute;
+    stageInfo.module = computeModule;
+    stageInfo.pName = "main";
 
-    shaderInfo.stage = vk::ShaderStageFlagBits::eCompute;
-    shaderInfo.codeType = codeType;
-    shaderInfo.codeSize = srcCode.size() * sizeof(uint32_t);
-    shaderInfo.pCode = srcCode.data();
-    shaderInfo.pName = pName;
-    shaderInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    shaderInfo.pSetLayouts = setLayouts.data();
-    shaderInfo.pushConstantRangeCount = static_cast<uint32_t>(pushRanges.size());
-    shaderInfo.pPushConstantRanges = pushRanges.data();
+    vk::ComputePipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.stage = stageInfo;
+    pipelineInfo.layout = pipelineLayout;
 
-    vk::ResultValue<vk::ShaderEXT> createShadersAttempt = 
-        device.createShaderEXT(shaderInfo);
-    
-    if(createShadersAttempt.result != vk::Result::eSuccess)
+    vk::ResultValue<vk::Pipeline> pipelineAttempt =
+        device.createComputePipeline(vk::PipelineCache(), pipelineInfo);
+
+    device.destroyShaderModule(computeModule);
+
+    if(pipelineAttempt.result != vk::Result::eSuccess)
     {
-        logger->print("Failed to create compute shader object");
-        return vk::ShaderEXT();
+        logger->print("Failed to create compute pipeline");
+        return vk::Pipeline();
     }
 
-    vk::ShaderEXT computeShader = createShadersAttempt.value;
-    
+    vk::Pipeline pipeline = pipelineAttempt.value;
+
     deletionQueue.push_back(
-        [logger, computeShader] (vk::Device device)->void {
-            device.destroyShaderEXT(computeShader);
-            logger->print("Deleted compute shader");
+        [logger, pipeline] (vk::Device device)->void {
+            device.destroyPipeline(pipeline);
+            logger->print("Deleted compute pipeline");
         }
     );
 
-    return computeShader;
+    logger->print("Created compute pipeline");
+    return pipeline;
+}
+
+vk::Pipeline make_graphics_pipeline(
+    vk::Device device,
+    const char* vertexFileName,
+    const char* fragmentFileName,
+    const GraphicsPipelineConfig& config,
+    vk::PipelineLayout pipelineLayout,
+    vk::Format colorFormat,
+    vk::Format depthFormat,
+    std::deque<std::function<void(vk::Device)>>& deletionQueue
+) {
+    Logger* logger = Logger::get_logger();
+
+    vk::ShaderModule vertexModule = make_shader_module(device, vertexFileName);
+    if(!vertexModule)
+        return vk::Pipeline();
+
+    vk::ShaderModule fragmentModule = make_shader_module(device, fragmentFileName);
+    if(!fragmentModule)
+    {
+        device.destroyShaderModule(vertexModule);
+        return vk::Pipeline();
+    }
+
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {};
+
+    shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
+    shaderStages[0].module = vertexModule;
+    shaderStages[0].pName = "main";
+
+    shaderStages[1].stage = vk::ShaderStageFlagBits::eFragment;
+    shaderStages[1].module = fragmentModule;
+    shaderStages[1].pName = "main";
+
+    bool hasVertexBindings = !config.vertexBindingDescriptions.empty();
+    bool hasVertexAttributes = !config.vertexAttributeDescriptions.empty();
+
+    if(hasVertexBindings != hasVertexAttributes)
+    {
+        device.destroyShaderModule(fragmentModule);
+        device.destroyShaderModule(vertexModule);
+
+        logger->print("Invalid graphics pipeline vertex input configuration");
+        return vk::Pipeline();
+    }
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo = {};
+    
+    vertexInputInfo.vertexBindingDescriptionCount = 
+        static_cast<uint32_t>(config.vertexBindingDescriptions.size());
+    
+    vertexInputInfo.pVertexBindingDescriptions = (
+        config.vertexBindingDescriptions.empty()
+            ? nullptr
+            : config.vertexBindingDescriptions.data()
+    );
+
+    vertexInputInfo.vertexAttributeDescriptionCount = 
+        static_cast<uint32_t>(config.vertexAttributeDescriptions.size());
+    
+    vertexInputInfo.pVertexAttributeDescriptions = (
+        config.vertexAttributeDescriptions.empty()
+            ? nullptr
+            : config.vertexAttributeDescriptions.data()
+    );
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {};
+    inputAssemblyInfo.topology = config.topology;
+    inputAssemblyInfo.primitiveRestartEnable = vk::False;
+
+    vk::PipelineViewportStateCreateInfo viewportInfo = {};
+    viewportInfo.viewportCount = 1;
+    viewportInfo.scissorCount = 1;
+
+    vk::PipelineRasterizationStateCreateInfo rasterizationInfo = {};
+    rasterizationInfo.depthClampEnable = vk::False;
+    rasterizationInfo.rasterizerDiscardEnable = vk::False;
+    rasterizationInfo.polygonMode = vk::PolygonMode::eFill;
+    rasterizationInfo.cullMode = config.cullMode;
+    rasterizationInfo.frontFace = config.frontFace;
+    rasterizationInfo.depthBiasEnable = vk::False;
+    rasterizationInfo.lineWidth = 1.0f;
+
+    vk::PipelineMultisampleStateCreateInfo multisampleInfo = {};
+    multisampleInfo.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampleInfo.sampleShadingEnable = vk::False;
+
+    vk::PipelineDepthStencilStateCreateInfo depthStencilInfo = {};
+    depthStencilInfo.depthTestEnable = (config.depthTest ? vk::True : vk::False);
+    depthStencilInfo.depthWriteEnable = (config.depthWrite ? vk::True : vk::False);
+    depthStencilInfo.depthCompareOp = config.depthCompareOp;
+    depthStencilInfo.depthBoundsTestEnable = vk::False;
+    depthStencilInfo.stencilTestEnable = vk::False;
+
+    vk::PipelineColorBlendStateCreateInfo colorBlendInfo = {};
+    colorBlendInfo.logicOpEnable = vk::False;
+    colorBlendInfo.attachmentCount = 1;
+    colorBlendInfo.pAttachments = &config.colorBlendAttachment;
+
+    std::array<vk::DynamicState, 2> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {};
+    dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicStateInfo.pDynamicStates = dynamicStates.data();
+
+    vk::PipelineRenderingCreateInfoKHR renderingInfo = {};
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachmentFormats = &colorFormat;
+    renderingInfo.depthAttachmentFormat = depthFormat;
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineInfo.pStages = shaderStages.data();
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+    pipelineInfo.pViewportState = &viewportInfo;
+    pipelineInfo.pRasterizationState = &rasterizationInfo;
+    pipelineInfo.pMultisampleState = &multisampleInfo;
+    pipelineInfo.pDepthStencilState = &depthStencilInfo;
+    pipelineInfo.pColorBlendState = &colorBlendInfo;
+    pipelineInfo.pDynamicState = &dynamicStateInfo;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = vk::RenderPass();
+    pipelineInfo.subpass = 0;
+
+    vk::ResultValue<vk::Pipeline> pipelineAttempt =
+        device.createGraphicsPipeline(vk::PipelineCache(), pipelineInfo);
+
+    device.destroyShaderModule(fragmentModule);
+    device.destroyShaderModule(vertexModule);
+
+    if(pipelineAttempt.result != vk::Result::eSuccess)
+    {
+        logger->print("Failed to create graphics pipeline");
+        return vk::Pipeline();
+    }
+
+    vk::Pipeline pipeline = pipelineAttempt.value;
+
+    deletionQueue.push_back(
+        [logger, pipeline](vk::Device device)->void {
+            device.destroyPipeline(pipeline);
+            logger->print("Deleted graphics pipeline");
+        }
+    );
+
+    logger->print("Created graphics pipeline");
+    return pipeline;
+}
+
+namespace
+{
+    vk::ShaderModule make_shader_module(vk::Device device, const char* fileName)
+    {
+        Logger* logger = Logger::get_logger();
+
+        std::vector<uint32_t> code = utils::read_file(fileName);
+        if(code.empty())
+        {
+            logger->print("Shader file is empty or failed to load");
+            return vk::ShaderModule();
+        }
+
+        vk::ShaderModuleCreateInfo moduleInfo = {};
+        moduleInfo.codeSize = code.size() * sizeof(uint32_t);
+        moduleInfo.pCode = code.data();
+
+        vk::ResultValue<vk::ShaderModule> moduleAttempt =
+            device.createShaderModule(moduleInfo);
+
+        if(moduleAttempt.result != vk::Result::eSuccess)
+        {
+            logger->print("Failed to create shader module");
+            return vk::ShaderModule();
+        }
+
+        return moduleAttempt.value;
+    }
 }

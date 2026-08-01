@@ -30,12 +30,10 @@ App::App(GLFWwindow* window, Engine* engine)
     double mouseY = 0.0;
     glfwGetCursorPos(m_window, &mouseX, &mouseY);
 
-    {
-        std::lock_guard<std::mutex> lock(m_inputMutex);
-        
-        m_inputState.mouseX = mouseX;
-        m_inputState.mouseY = mouseY;
-    }
+    std::lock_guard<std::mutex> lock(m_inputMutex);
+    
+    m_inputState.mouseX = mouseX;
+    m_inputState.mouseY = mouseY;
 }
 
 void App::main_loop()

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef ALLOCATED_IMAGE_H
-#define ALLOCATED_IMAGE_H
+#ifndef RENDERER_RESOURCES_IMAGES_ALLOCATED_IMAGE_H
+#define RENDERER_RESOURCES_IMAGES_ALLOCATED_IMAGE_H
 
 #include <deque>
 #include <functional>
@@ -14,7 +14,7 @@ struct AllocatedImage
     vk::Image image {};
     vk::ImageView imageView {};
     
-    VmaAllocation allocation { nullptr };
+    VmaAllocation allocation { VK_NULL_HANDLE };
 
     vk::Format format { vk::Format::eUndefined };
     vk::Extent2D extent {};

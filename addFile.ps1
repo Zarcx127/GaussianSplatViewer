@@ -1,6 +1,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$FilePath,
-    [Parameter(Mandatory = $true)][string]$Type
+    
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("hpp", "cpp")]
+    [String]$Type
 )
 
 $FilePath = $FilePath.TrimEnd('\','/')
@@ -21,11 +24,14 @@ else
     $relPath = $filename
 }
 
+$guardSource = $relPath -replace '\\', '/'
+$guardSource = $guardSource -replace '/', '_'
+
 $guardBuilder = New-Object System.Text.StringBuilder
 $prevWasUnderscore = $false
 $index = 0
 
-foreach($ch in $filename.ToCharArray()) 
+foreach($ch in $guardSource.ToCharArray()) 
 {
     $isUpper = ($ch -cmatch '^[A-Z]$')
     $isUnderscore = ($ch -ceq '_')
@@ -79,4 +85,4 @@ else
 }
 
 $target = "$FilePath.$Type"
-Set-Content -Path $target -Value $content
+Set-Content -Path $target -Value $content -Encoding utf8

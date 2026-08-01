@@ -67,7 +67,7 @@ AllocatedImage create_depth_image(
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
     VkImage rawImage = {};
-    VmaAllocation rawAllocation = nullptr;
+    VmaAllocation rawAllocation = VK_NULL_HANDLE;
 
     vk::Result vmaImageAttempt = static_cast<vk::Result>(
         vmaCreateImage(
@@ -98,8 +98,8 @@ AllocatedImage create_depth_image(
 
     if(!depthImage.imageView)
     {
-        vmaDestroyImage(allocator, rawImage, rawAllocation);
         logger->print("Failed to create depth image view");
+        vmaDestroyImage(allocator, rawImage, rawAllocation);
 
         return {};
     }

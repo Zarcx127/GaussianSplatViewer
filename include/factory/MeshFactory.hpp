@@ -1,36 +1,23 @@
 #pragma once
 
-#ifndef MESH_FACTORY_H
-#define MESH_FACTORY_H
+#ifndef FACTORY_MESH_FACTORY_H
+#define FACTORY_MESH_FACTORY_H
 
+#include <array>
 #include <deque>
-#include <vector>
 #include <functional>
-
-#include <glm/glm.hpp>
 
 #include <vulkan/vulkan.hpp>
 #include <vma/vk_mem_alloc.h>
 
-struct Vertex
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-};
+#include "renderer/resources/meshes/Mesh.hpp"
+#include "renderer/resources/pipeline/GraphicsPipelineConfig.hpp"
 
-struct Mesh
-{
-    vk::Buffer buffer;
-    vk::DeviceSize offset;
+vk::VertexInputBindingDescription get_mesh_vertex_binding_description();
 
-    VmaAllocation allocation;
+std::array<vk::VertexInputAttributeDescription, 2> get_mesh_vertex_attribute_descriptions();
 
-    uint32_t numOfVertices;
-};
-
-vk::VertexInputBindingDescription2EXT get_binding_description();
-
-std::vector<vk::VertexInputAttributeDescription2EXT> get_attribute_descriptions();
+GraphicsPipelineConfig get_mesh_pipeline_config();
 
 Mesh build_cube(
     VmaAllocator& allocator, 

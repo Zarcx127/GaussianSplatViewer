@@ -9,7 +9,7 @@ layout(push_constant) uniform FramePushConstants
     mat4 invView;
     mat4 invProj;
     vec4 cameraPos;
-} pc;
+} pushConstants;
 
 float gridLine(float value, float spacing, float thickness);
 float axisLine2D(vec2 rayOriginPlane, vec2 rayDirPlane, float radius);
@@ -39,14 +39,14 @@ void main()
     vec4 nearClip = vec4(ndc, 0.0, 1.0);
     vec4 farClip = vec4(ndc, 1.0, 1.0);
 
-    vec4 nearView = pc.invProj * nearClip;
+    vec4 nearView = pushConstants.invProj * nearClip;
     nearView /= nearView.w;
 
-    vec4 farView = pc.invProj * farClip;
+    vec4 farView = pushConstants.invProj * farClip;
     farView /= farView.w;
 
-    vec3 nearWorld = (pc.invView * nearView).xyz;
-    vec3 farWorld = (pc.invView * farView).xyz;
+    vec3 nearWorld = (pushConstants.invView * nearView).xyz;
+    vec3 farWorld = (pushConstants.invView * farView).xyz;
 
     vec3 rayOrigin = nearWorld;
     vec3 rayDir = normalize(farWorld - nearWorld);
@@ -135,5 +135,5 @@ float axisLine2D(vec2 rayOriginPlane, vec2 rayDirPlane, float radius)
 
     float dist = length(closestPoint);
 
-    return 1.0 - smoothstep(radius, radius * 1.8, dist);
+    return (1.0 - smoothstep(radius, radius * 1.8, dist));
 }

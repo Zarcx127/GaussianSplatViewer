@@ -1,36 +1,76 @@
-//
+// Make Commands
 
-reload mode=[mode]
-    run .exe after rebuilding objs and shaders
-	mode = debug/release
-	by default mode = debug
+// "make" defaults to "make reload"
 
-restart mode=[mode]
-	run .exe after rebuilding objs and shaders
-	shaders are recompiled
-	mode = debug/release
-	by default mode = debug
+// [mode] = debug/release
+// by default [mode] = debug
 
-clean_run mode=[mode]
-    run .exe after rebuilding shaders and obj
+make build mode=[mode]
+	rebuilds objs, shaders and executable
+
+make reload mode=[mode]
+    run .exe after rebuilding objs,
+	shaders and executable
+
+make clean_run mode=[mode]
+    run .exe after rebuilding objs, 
+	shaders and executable
 	both shaders and obj are recompiled
-	mode = debug/release
-	by default mode = debug
 
-create [path_to_file]
-    creates respective .hpp and .cpp file 
+make run
+	clears console and runs output
 
-delete [path_to_file]
- 	deletes both .hpp and .cpp file
- 	if subfolder is empty, delete it as well
- 	(run clean_run on next compile)
+make release
+	creates a zip that contains the full
+	release package
 
-clean
+make clean
     deletes all spv and obj files
     deletes the main executable
+	deletes the release package
 
-clean_shaders
+make clean_obj mode=[mode]
+    deletes all obj files for that [mode]
+
+make clean_shaders
     deletes all spv files
 
-clean_obj
-    deletes all obj files
+make delete_exe
+	deletes the main executable
+
+make create [type] [path_to_file]/[file_name]
+    creates in [path_to_file] either:
+		1. [file_name].hpp
+		2. [file_name].cpp
+		3. both a [file_name].hpp and [file_name].cpp
+
+	the respective types are:
+		1. header
+		2. source
+		3. pair
+
+	*sub folder will be created if it does not exist	
+	e.g. to create Example.hpp and Example.cpp 
+		 in sub folder of  src/tmp/ and src/tmp/
+		 type "make create pair tmp/Example" and 
+		 both /include/tmp/Example.hpp and
+		 /src/tmp/Example.cpp will be created
+
+make create [type] [path_to_file]/[file_name]
+    deletes from [path_to_file] either:
+		1. [file_name].hpp
+		2. [file_name].cpp
+		3. both a [file_name].hpp and [file_name].cpp
+
+
+	the respective types are:
+		1. header
+		2. source
+		3. pair
+	
+	*sub folder will be deleted if it is empty
+	e.g. to delete Example.hpp and Example.cpp 
+		 in sub folder of  src/tmp/ and src/tmp/
+		 type "make delete pair tmp/Example" and 
+		 both /include/tmp/Example.hpp and
+		 /src/tmp/Example.cpp will be deleted

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef LOGGING_LOGGER_H
+#define LOGGING_LOGGER_H
 
 #include <deque>
 #include <vector>

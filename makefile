@@ -1,41 +1,51 @@
-OUT := graphics.exe
+OUT := graphics
+
+mode ?= debug
+
+EXE := $(OUT).exe
+RELEASE := $(OUT).zip
 
 CURR_DIR := $(subst \,/,$(abspath .))/
 
 SHD_DIR := $(CURR_DIR)shaders/
 INC_DIR := $(CURR_DIR)include/
 SRC_DIR := $(CURR_DIR)src/
-OBJ_DIR := $(CURR_DIR)obj/
+OBJ_DIR := $(CURR_DIR)obj/$(mode)/
+
+MODE_FILE := $(CURR_DIR).lastMode
+LAST_MODE := $(strip $(shell if exist "$(MODE_FILE)" type "$(MODE_FILE)"))
 
 JOBS := $(shell set /a NUMBER_OF_PROCESSORS-1)
+ifeq ($(JOBS), 0)
+	JOBS := 1
+endif
 
 CC := g++
-FLAGS_OBJ := -std=c++17 -O2 -Werror \
+FLAGS_OBJ := -std=c++17 -O2 -Werror -MMD -MP \
 	-DVULKAN_HPP_NO_EXCEPTIONS \
-	-DGLFW_INCLUDE_VULKAN \
+	-DGLFW_INCLUDE_NONE \
 	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 
 INCLUDE := -I$(INC_DIR) -I$(subst \,/,$(VULKAN_SDK))/Include
 FLAGS_EXE := -std=c++17 -O2 \
 	-L$(subst \,/,$(VULKAN_SDK))/Lib \
-	-lvulkan-1 -lglfw3 \
+	-static -lvulkan-1 -lglfw3 -lgdi32
 
-PSFLAGS := -ExecutionPolicy Bypass
-
-SRCs_RAW := $(shell powershell -Command "Get-ChildItem -Recurse -Filter *.cpp | ForEach-Object { $$_.FullName }")
+SRCs_RAW := $(shell powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp | ForEach-Object { $$_.FullName }")
 SRCs := $(subst \,/,$(SRCs_RAW))
 OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
+DEPs := $(OBJs:.o=.d)
 
 SHADERS_RAW := $(shell powershell -Command "Get-ChildItem -File $(SHD_DIR) | ForEach-Object { $$_.FullName }")
 SHADERS := $(subst \,/,$(SHADERS_RAW))
 
-SPV_FILES := $(addsuffix .spv,$(addprefix $(SHD_DIR)bin/,$(notdir $(SHADERS))))
+SPVs := $(addsuffix .spv,$(addprefix $(SHD_DIR)bin/,$(notdir $(SHADERS))))
 
-mode ?= debug
 ifeq ($(mode), debug)
-    FLAGS_OBJ += -DDEBUG
+	FLAGS_OBJ += -DDEBUG
 else ifeq ($(mode), release)
-    FLAGS_OBJ += -DRELEASE
+	FLAGS_OBJ += -DRELEASE
+	FLAGS_EXE += -mwindows
 else
     $(error Unknown build mode)
 endif
@@ -63,90 +73,178 @@ endif
 
 # --- End sanity checks ---
 
-.PHONY: reload restart all clean_run run build build_shaders clean clean_shaders clean_obj create delete
+MAKE_NP := $(MAKE) --no-print-directory
+PSFLAGS := -ExecutionPolicy Bypass
 
-reload: 
-	@make --no-print-directory -j$(JOBS) all
-	@make --no-print-directory run
+.PHONY: reload clean_run build run release 
+.PHONY: clean clean_shaders clean_obj delete_exe
+.PHONY: create delete
 
-restart: clean_shaders
-	@make --no-print-directory -j$(JOBS) all
-	@make --no-print-directory run
+define CREATE_FILE
+	$(eval EXT := $(1))
+	$(eval DIR := $(2))
+	$(eval NAME := $(3))
 
-clean_run: clean
-	@make --no-print-directory -j$(JOBS) all
-	@make --no-print-directory run
+	@if exist "$(DIR)$(NAME).$(EXT)" (echo ERROR: $(DIR)$(NAME).$(EXT) already exists! & exit 1)
+	@if not exist "$(DIR)$(dir $(NAME))" mkdir "$(DIR)$(dir $(NAME))"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(DIR)$(NAME)" -Type "$(EXT)"
+	
+	@echo $(NAME).$(EXT) created
+endef
 
-build: $(OBJs)
+define DELETE_FILE
+	$(eval EXT := $(1))
+	$(eval DIR := $(2))
+	$(eval NAME := $(3))
 
-build_shaders: $(SPV_FILES)
+	@if exist "$(DIR)$(NAME).$(EXT)" powershell $(PSFLAGS) -Command "Remove-Item '$(DIR)$(NAME).$(EXT)'"
+	@powershell $(PSFLAGS) -File "$(CURR_DIR)CleanUp.ps1" -path "$(DIR)$(dir $(NAME))" -root "$(DIR)"
+
+	@echo $(NAME).$(EXT) deleted
+endef
+
+reload:
+	@$(MAKE_NP) build mode=$(mode)
+	@$(MAKE_NP) run
+
+clean_run: 
+	@$(MAKE_NP) clean_obj mode=$(mode)
+	@$(MAKE_NP) clean_shaders
+	@$(MAKE_NP) delete_exe
+
+	@$(MAKE_NP) build mode=$(mode)
+	@$(MAKE_NP) run
+
+build: 
+ifneq ($(LAST_MODE),$(mode))
+	@if exist "$(CURR_DIR)$(EXE)" powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(EXE)' -Force"
+endif
+
+	@$(MAKE_NP) -j$(JOBS) $(EXE) mode=$(mode)
+
+	@echo $(mode) > "$(MODE_FILE)"
+
+run:
+	@if not exist $(EXE) (echo ERROR: $(EXE) not found & exit 1)
+
+	@powershell $(PSFLAGS) -Command "Clear-Host"
+	@$(CURR_DIR)$(EXE) 
+
+release: 
+	@$(MAKE_NP) clean_obj mode=release
+	@$(MAKE_NP) clean_shaders
+
+	@if exist "$(CURR_DIR)$(EXE)" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(EXE)'" & \
+		echo $(EXE) has been deleted \
+	)
+
+	@if exist "$(CURR_DIR)$(RELEASE)" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(RELEASE)'" & \
+		echo $(RELEASE) has been deleted \
+	)
+
+	@$(MAKE_NP) build mode=release
+
+	@if exist "$(CURR_DIR)tmp" powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)tmp' -Recurse -Force"
+	@mkdir "$(CURR_DIR)tmp/shaders/bin/"
+
+	@powershell $(PSFLAGS) -Command "Copy-Item -LiteralPath '$(CURR_DIR)$(EXE)' -Destination '$(CURR_DIR)tmp/'"
+	@for %%F in ($(foreach spv,$(SPVs),"$(spv)")) do ( \
+		powershell $(PSFLAGS) -Command "Copy-Item -LiteralPath '%%~F' -Destination '$(CURR_DIR)tmp/shaders/bin/'" || \
+		exit 1 \
+	)
+	
+	@powershell $(PSFLAGS) -Command "\
+		$$ProgressPreference = 'SilentlyContinue'; \
+		Compress-Archive -Path '$(CURR_DIR)tmp/*' -DestinationPath '$(CURR_DIR)$(RELEASE)' -Force; \
+		Remove-Item '$(CURR_DIR)tmp' -Recurse -Force"
+
+	@echo $(RELEASE) is ready to export
 
 $(SHD_DIR)bin/%.spv: $(SHD_DIR)% 
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
 	glslc "$<" -o "$@"
 
-run:
-	@if not exist "$(CURR_DIR)$(OUT)" (make --no-print-directory -j$(NUMBER_OF_PROCESSORS) all)
-
-	@powershell -Command "Clear-Host"
-	@$(OUT) 
-
-all: build_shaders $(OBJs)
-	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(OUT)" $(FLAGS_EXE) 
+$(EXE): $(SPVs) $(OBJs)
+	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
 	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
 
+clean:
+	@$(MAKE_NP) clean_obj mode=debug
+	@$(MAKE_NP) clean_obj mode=release
+	@if exist "$(CURR_DIR)/obj" powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)/obj' -Force"
+
+	@$(MAKE_NP) clean_shaders
+
+	@if exist "$(CURR_DIR)$(EXE)" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(EXE)'" & \
+		echo $(EXE) has been deleted \
+	)
+
+	@if exist "$(CURR_DIR)$(RELEASE)" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(RELEASE)'" & \
+		echo $(RELEASE) has been deleted \
+	)
+
+	@if exist "$(MODE_FILE)" powershell $(PSFLAGS) -Command "Remove-Item '$(MODE_FILE)'"
+
 clean_obj:
 	@if exist "$(OBJ_DIR)" powershell $(PSFLAGS) -Command "Remove-Item '$(OBJ_DIR)' -Recurse -Force"
 
-	@echo object files have been deleted
+	@echo $(mode) object files have been deleted
 
 clean_shaders:
 	@if exist "$(SHD_DIR)bin/" powershell $(PSFLAGS) -Command "Remove-Item '$(SHD_DIR)bin/' -Recurse -Force"
 
 	@echo shaders have been deleted
 
-clean:
-	@make --no-print-directory clean_obj
-	@make --no-print-directory clean_shaders
-
-	@if exist "$(CURR_DIR)$(OUT)" powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(OUT)'"
-	
-	@echo $(OUT) has been deleted
+delete_exe: 
+	@if exist "$(CURR_DIR)$(EXE)" ( \
+		powershell $(PSFLAGS) -Command "Remove-Item '$(CURR_DIR)$(EXE)'" & \
+		echo $(EXE) has been deleted \
+	)
 
 create:
-	@if not "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
-	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: File name not specified! & exit 1)
+	@if not "$(word 4, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
+	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: File type not specified! & exit 1)
+	@if "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: File name not specified! & exit 1)
 
-	$(eval FILE := $(word 2, $(MAKECMDGOALS)))
-	$(eval DIRPATH := $(dir $(FILE)))
+	$(eval TYPE := $(word 2, $(MAKECMDGOALS)))
+	$(eval FILE := $(word 3, $(MAKECMDGOALS)))
 
-	@if exist "$(INC_DIR)$(FILE).hpp" (echo ERROR: include/$(FILE).hpp already exists! & exit 1)
-	@if exist "$(SRC_DIR)$(FILE).cpp" (echo ERROR: src/$(FILE).cpp already exists! & exit 1)
+	$(eval TARGET_EXT :=)
+	$(if $(filter pair,$(TYPE)),$(eval TARGET_EXT := cpp hpp))
+	$(if $(filter source,$(TYPE)),$(eval TARGET_EXT := cpp))
+	$(if $(filter header,$(TYPE)),$(eval TARGET_EXT := hpp))
 
-	@if not exist "$(INC_DIR)$(DIRPATH)" mkdir "$(INC_DIR)$(DIRPATH)"
-	@if not exist "$(SRC_DIR)$(DIRPATH)" mkdir "$(SRC_DIR)$(DIRPATH)"
+	@if "$(TARGET_EXT)" == "" (echo ERROR: Unknown option: $(TYPE) & exit 1)
 
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(INC_DIR)$(FILE)" -Type "hpp"
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)AddFile.ps1" -FilePath "$(SRC_DIR)$(FILE)" -Type "cpp"
-
-	@echo $(FILE).cpp and $(FILE).hpp created
-
+	$(if $(filter hpp,$(TARGET_EXT)),$(call CREATE_FILE,hpp,$(INC_DIR),$(FILE)))
+	$(if $(filter cpp,$(TARGET_EXT)),$(call CREATE_FILE,cpp,$(SRC_DIR),$(FILE)))
+	
 delete:
-	@if not "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
-	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: File name not specified! & exit 1)
+	@if not "$(word 4, $(MAKECMDGOALS))" == "" (echo ERROR: Too many arguments! & exit 1)
+	@if "$(word 2, $(MAKECMDGOALS))" == "" (echo ERROR: File type not specified! & exit 1)
+	@if "$(word 3, $(MAKECMDGOALS))" == "" (echo ERROR: File name not specified! & exit 1)
 
-	$(eval FILE := $(word 2, $(MAKECMDGOALS)))
+	$(eval TYPE := $(word 2, $(MAKECMDGOALS)))
+	$(eval FILE := $(word 3, $(MAKECMDGOALS)))
 
-	@if exist "$(INC_DIR)$(FILE).hpp" powershell $(PSFLAGS) -Command "Remove-Item '$(INC_DIR)$(FILE).hpp'"
-	@if exist "$(SRC_DIR)$(FILE).cpp" powershell $(PSFLAGS) -Command "Remove-Item '$(SRC_DIR)$(FILE).cpp'"
+	$(eval TARGET_EXT :=)
+	$(if $(filter pair,$(TYPE)),$(eval TARGET_EXT := cpp hpp))
+	$(if $(filter source,$(TYPE)),$(eval TARGET_EXT := cpp))
+	$(if $(filter header,$(TYPE)),$(eval TARGET_EXT := hpp))
 
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)CleanUp.ps1" -path "$(INC_DIR)$(dir $(FILE))" -root "$(INC_DIR)"
-	@powershell $(PSFLAGS) -File "$(CURR_DIR)CleanUp.ps1" -path "$(SRC_DIR)$(dir $(FILE))" -root "$(SRC_DIR)"
+	@if "$(TARGET_EXT)" == "" (echo ERROR: Unknown option: $(TYPE) & exit 1)
 
-	@echo $(FILE).cpp and $(FILE).hpp deleted
+	$(if $(filter hpp,$(TARGET_EXT)),$(call DELETE_FILE,hpp,$(INC_DIR),$(FILE)))
+	$(if $(filter cpp,$(TARGET_EXT)),$(call DELETE_FILE,cpp,$(SRC_DIR),$(FILE)))
 
-$(word 2, $(MAKECMDGOALS)):
+$(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS)):
 	@:
+
+-include $(DEPs)

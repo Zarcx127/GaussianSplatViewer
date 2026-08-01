@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef IMAGE_H
-#define IMAGE_H
+#ifndef RENDERER_CORE_IMAGE_H
+#define RENDERER_CORE_IMAGE_H
 
 #include <vulkan/vulkan.hpp>
 
@@ -21,7 +21,7 @@ void transition_image_layout(
     vk::AccessFlags dstAccessMask,
     vk::PipelineStageFlags srcStage, 
     vk::PipelineStageFlags dstStage,
-    vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor
+    vk::ImageAspectFlags aspectMask
 ); 
 
 #endif

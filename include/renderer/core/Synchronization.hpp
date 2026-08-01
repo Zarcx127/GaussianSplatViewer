@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef SYNCHRONIZATION_H
-#define SYNCHRONIZATION_H
+#ifndef RENDERER_CORE_SYNCHRONIZATION_H
+#define RENDERER_CORE_SYNCHRONIZATION_H
 
 #include <deque>
 #include <functional>

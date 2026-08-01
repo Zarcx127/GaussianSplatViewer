@@ -9,78 +9,75 @@
 
 #include "renderer/core/Instance.hpp"
 
-using std::vector;
+#include "BuildConfig.hpp"
 
 namespace 
 {
+    bool supports_extensions(
+        const vk::PhysicalDevice& device, 
+        std::vector<const char*> requestedExtensions
+    );
+
+    PhysicalDeviceSelection get_suitable_device(
+        vk::PhysicalDevice device, 
+        vk::SurfaceKHR surface
+    );
+
     uint8_t get_device_type_score(const vk::PhysicalDevice& device);
 
     uint64_t get_device_vram(const vk::PhysicalDevice& device);
+
+    std::vector<const char*> get_required_device_extensions();
+
+    bool supports_dynamic_rendering(vk::PhysicalDevice device);
+
+    bool supports_required_surface_features(
+        vk::PhysicalDevice device,
+        vk::SurfaceKHR surface
+    );
 }
 
-bool supports(const vk::PhysicalDevice& device, vector<const char*> requestedExtensions) 
-{
-    vector<vk::ExtensionProperties> supportedExtensions = device.enumerateDeviceExtensionProperties().value;
-    vector<const char*> supportedExtensionNames(supportedExtensions.size());
-    for(uint32_t i = 0; i < supportedExtensions.size(); i++)
-        supportedExtensionNames[i] = supportedExtensions[i].extensionName;
-
-    if(!utils::vector_compare(requestedExtensions, supportedExtensionNames))
-        return false;
-
-    return true;
-}
-
-bool is_suitable(const vk::PhysicalDevice device)
+PhysicalDeviceSelection choose_physical_device(vk::Instance instance, vk::SurfaceKHR surface)
 {
     Logger* logger = Logger::get_logger();
 
-    vector<const char*> requestedExtensions;
-    requestedExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-
-    if(!supports(device, requestedExtensions))
-    {
-        logger->print("Device can't support all requested extensions");
-        return false;
-    }
-
-    logger->print("Device can support all requested extensions");
-    return true;
-}
-
-vk::PhysicalDevice choose_physical_device(const vk::Instance instance)
-{
-    Logger* logger = Logger::get_logger();
-
-    vector<vk::PhysicalDevice> availableDevices, suitableDevices;
+    std::vector<vk::PhysicalDevice> availableDevices;
     availableDevices = instance.enumeratePhysicalDevices().value;
+
+    std::vector<PhysicalDeviceSelection> suitableDevices;
     for(vk::PhysicalDevice device : availableDevices)
-        if(is_suitable(device))
-            suitableDevices.push_back(device);
+    {
+        PhysicalDeviceSelection selection = get_suitable_device(device, surface);
+        if(selection.device)
+            suitableDevices.push_back(selection);
+    }
 
     if(suitableDevices.empty())
     {
         logger->print("No suitable device found");
-        return vk::PhysicalDevice();
+        return {};
     }
 
     std::sort(
         suitableDevices.begin(), suitableDevices.end(), 
-        [] (const vk::PhysicalDevice& devA, const vk::PhysicalDevice& devB)->bool{
-            uint8_t devAType = get_device_type_score(devA);
-            uint8_t devBType = get_device_type_score(devB);
+        [] (
+            const PhysicalDeviceSelection& devA, 
+            const PhysicalDeviceSelection& devB
+        )->bool{
+            uint8_t devAType = get_device_type_score(devA.device);
+            uint8_t devBType = get_device_type_score(devB.device);
 
             if(devAType != devBType)
                 return (devAType > devBType);
 
-            uint64_t devAVRam = get_device_vram(devA);
-            uint64_t devBVRam = get_device_vram(devB);
+            uint64_t devAVRam = get_device_vram(devA.device);
+            uint64_t devBVRam = get_device_vram(devB.device);
 
             return (devAVRam > devBVRam);
         }
     );
 
-    logger->log(suitableDevices[0]);
+    logger->log(suitableDevices[0].device);
     return suitableDevices[0];
 }
 
@@ -91,7 +88,9 @@ uint32_t find_queue_family_index(
 ){
     Logger* logger = Logger::get_logger();
 
-    vector<vk::QueueFamilyProperties> queueFamilies = physicalDevice.getQueueFamilyProperties();
+    std::vector<vk::QueueFamilyProperties> queueFamilies = 
+        physicalDevice.getQueueFamilyProperties();
+    
     logger->log(queueFamilies, "");
 
     for(uint32_t i = 0; i < queueFamilies.size(); i++)
@@ -116,48 +115,36 @@ uint32_t find_queue_family_index(
 
 vk::Device create_logical_device(
     vk::PhysicalDevice physicalDevice, 
-    vk::SurfaceKHR surface,
+    uint32_t queueFamilyIndex,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     Logger* logger = Logger::get_logger();
 
-    uint32_t graphicsIndex = find_queue_family_index(physicalDevice, surface, vk::QueueFlagBits::eGraphics);
     float queuePriority = 1.0f;
 
     vk::DeviceQueueCreateInfo queueInfo = vk::DeviceQueueCreateInfo(
-        vk::DeviceQueueCreateFlags(), graphicsIndex, 1, &queuePriority
+        vk::DeviceQueueCreateFlags(), queueFamilyIndex, 1, &queuePriority
     );
 
     vk::PhysicalDeviceFeatures deviceFeatures = {};
-    vk::PhysicalDeviceShaderObjectFeaturesEXT shaderFeatures = {};
-    vk::PhysicalDeviceVulkan13Features vulkan13Features = {};
-    
-    shaderFeatures.sType = vk::StructureType::ePhysicalDeviceShaderObjectFeaturesEXT;
-    vulkan13Features.sType = vk::StructureType::ePhysicalDeviceVulkan13Features;
-    
     deviceFeatures.samplerAnisotropy = vk::True;
-    shaderFeatures.shaderObject = vk::True;
-    vulkan13Features.dynamicRendering = vk::True;
-    vulkan13Features.synchronization2 = vk::True;
-    
+
+    vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {};
+    dynamicRenderingFeatures.dynamicRendering = vk::True;
+    dynamicRenderingFeatures.sType = 
+        vk::StructureType::ePhysicalDeviceDynamicRenderingFeaturesKHR;
+
     vk::PhysicalDeviceFeatures2 featureChain = {};
     featureChain.sType  = vk::StructureType::ePhysicalDeviceFeatures2;
     featureChain.features = deviceFeatures;
-    
-    featureChain.pNext  = &vulkan13Features;
-    vulkan13Features.pNext = &shaderFeatures;
+    featureChain.pNext  = &dynamicRenderingFeatures;
 
-    vector<const char*> enabledLayers;
+    std::vector<const char*> enabledLayers;
     
-    if(logger->is_enabled())
+    if(build::enableValidation)
         enabledLayers.push_back("VK_LAYER_KHRONOS_validation");
 
-    vector<const char*> enabledExtensions = {
-        "VK_KHR_swapchain",
-        "VK_EXT_shader_object",
-        "VK_KHR_dynamic_rendering",
-        "VK_KHR_maintenance4"
-    };
+    std::vector<const char*> enabledExtensions = get_required_device_extensions();
 
     vk::DeviceCreateInfo deviceInfo = vk::DeviceCreateInfo(
         vk::DeviceCreateFlags(), 
@@ -172,7 +159,8 @@ vk::Device create_logical_device(
 
     deviceInfo.pNext = &featureChain;
 
-    vk::ResultValueType<vk::Device>::type logicalDevice = physicalDevice.createDevice(deviceInfo);
+    vk::ResultValueType<vk::Device>::type logicalDevice = 
+        physicalDevice.createDevice(deviceInfo);
 
     if(logicalDevice.result != vk::Result::eSuccess)
     {
@@ -195,6 +183,64 @@ vk::Device create_logical_device(
 
 namespace
 {
+    bool supports_extensions(
+        const vk::PhysicalDevice& device, 
+        std::vector<const char*> requestedExtensions
+    ) {
+        std::vector<vk::ExtensionProperties> supportedExtensions = 
+            device.enumerateDeviceExtensionProperties().value;
+        
+        std::vector<const char*> supportedExtensionNames(supportedExtensions.size());
+        for(uint32_t i = 0; i < supportedExtensions.size(); i++)
+            supportedExtensionNames[i] = supportedExtensions[i].extensionName;
+
+        if(!utils::vector_compare(requestedExtensions, supportedExtensionNames))
+            return false;
+
+        return true;
+    }
+
+    PhysicalDeviceSelection get_suitable_device(
+        vk::PhysicalDevice device, 
+        vk::SurfaceKHR surface
+    ) {
+        Logger* logger = Logger::get_logger();
+
+        std::vector<const char*> requestedExtensions = get_required_device_extensions();
+        if(!supports_extensions(device, requestedExtensions))
+        {
+            logger->print("Device can't support all requested extensions");
+            return {};
+        }
+
+        if(!supports_dynamic_rendering(device))
+        {
+            logger->print("Device does not support dynamic rendering");
+            return {};
+        }
+
+        uint32_t renderQueueFamilyIndex = find_queue_family_index(
+            device, 
+            surface,
+            vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute
+        );
+
+        if(renderQueueFamilyIndex == UINT32_MAX)
+        {
+            logger->print("Device has no graphics + compute + present queue");
+            return {};
+        }
+
+        if(!supports_required_surface_features(device, surface))
+        {
+            logger->print("Device surface support is not enough for this renderer");
+            return {};
+        }
+
+        logger->print("Device can support all requested extensions");
+        return {device, renderQueueFamilyIndex};
+    }
+
     uint8_t get_device_type_score(const vk::PhysicalDevice& device)
     {
         vk::PhysicalDeviceProperties properties = device.getProperties();
@@ -222,5 +268,68 @@ namespace
                 vram += heap.size;
 
         return (vram / GIGABYTE);
+    }
+
+    std::vector<const char*> get_required_device_extensions()
+    {
+        return {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME
+        };
+    }
+
+    bool supports_dynamic_rendering(vk::PhysicalDevice device)
+    {
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {};
+        dynamicRenderingFeatures.sType = 
+            vk::StructureType::ePhysicalDeviceDynamicRenderingFeaturesKHR;
+
+        vk::PhysicalDeviceFeatures2 features = {};
+        features.sType = vk::StructureType::ePhysicalDeviceFeatures2;
+        features.pNext = &dynamicRenderingFeatures;
+
+        device.getFeatures2(&features);
+
+        return (dynamicRenderingFeatures.dynamicRendering == vk::True);
+    }
+
+    bool supports_required_surface_features(
+        vk::PhysicalDevice device, 
+        vk::SurfaceKHR surface
+    ) {
+        vk::SurfaceCapabilitiesKHR capabilities =
+            device.getSurfaceCapabilitiesKHR(surface).value;
+
+        if(!(capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eStorage)) 
+            return false;
+
+        std::vector<vk::SurfaceFormatKHR> formats =
+            device.getSurfaceFormatsKHR(surface).value;
+
+        if(formats.empty()) 
+            return false;
+
+        bool hasRequiredFormat = false;
+        for(const vk::SurfaceFormatKHR& format : formats)
+        {
+            if(
+                (format.format == vk::Format::eR8G8B8A8Unorm) &&
+                (format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            ) {
+                hasRequiredFormat = true;
+                break;
+            }
+        }
+
+        if(!hasRequiredFormat) 
+            return false;
+
+        std::vector<vk::PresentModeKHR> presentModes = 
+            device.getSurfacePresentModesKHR(surface).value;
+
+        if(presentModes.empty())
+            return false;
+        
+        return true;
     }
 }

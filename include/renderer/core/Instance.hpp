@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef INSTANCE_H
-#define INSTANCE_H
+#ifndef RENDERER_CORE_INSTANCE_H
+#define RENDERER_CORE_INSTANCE_H
 
 #include <deque>
 #include <vector>

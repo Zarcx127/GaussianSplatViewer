@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef INPUT_STATE_H
-#define INPUT_STATE_H
+#ifndef INPUT_INPUT_STATE_H
+#define INPUT_INPUT_STATE_H
 
 struct InputState
 {

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef COMMAND_H
-#define COMMAND_H
+#ifndef RENDERER_CORE_COMMAND_H
+#define RENDERER_CORE_COMMAND_H
 
 #include <deque>
 #include <functional>
@@ -20,7 +20,7 @@ vk::CommandBuffer make_command_buffer(
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 );
 
-void immediate_submit(
+bool immediate_submit(
     vk::Device device,
     vk::CommandPool commandPool,
     vk::Queue queue,

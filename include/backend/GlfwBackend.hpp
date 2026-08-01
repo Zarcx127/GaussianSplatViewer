@@ -1,9 +1,11 @@
 #pragma once
 
-#ifndef GLFW_BACKEND_H
-#define GLFW_BACKEND_H
+#ifndef BACKEND_GLFW_BACKEND_H
+#define BACKEND_GLFW_BACKEND_H
 
-#include <glfw/glfw3.h>
+#include <vulkan/vulkan.hpp>
+
+#include <GLFW/glfw3.h>
 
 #include "logging/Logger.hpp"
 

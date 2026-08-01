@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef DESCRIPTORS_H
-#define DESCRIPTORS_H
+#ifndef RENDERER_RESOURCES_DESCRIPTORS_DESCRIPTORS_H
+#define RENDERER_RESOURCES_DESCRIPTORS_DESCRIPTORS_H
 
 #include <deque>
 #include <vector>

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef PIPELINE_LAYOUT_H
-#define PIPELINE_LAYOUT_H
+#ifndef RENDERER_RESOURCES_PIPELINE_PIPELINE_LAYOUT_H
+#define RENDERER_RESOURCES_PIPELINE_PIPELINE_LAYOUT_H
 
 #include <deque>
 #include <functional>

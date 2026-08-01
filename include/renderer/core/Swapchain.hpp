@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef SWAPCHAIN_H
-#define SWAPCHAIN_H
+#ifndef RENDERER_CORE_SWAPCHAIN_H
+#define RENDERER_CORE_SWAPCHAIN_H
 
 #include <deque>
 #include <vector>
@@ -19,8 +19,8 @@ struct SurfaceDetails
 class Swapchain
 {
 public:
-    uint32_t imageCount;
-    vk::SwapchainKHR chain;
+    uint32_t imageCount { 0 };
+    vk::SwapchainKHR chain {};
 
     vk::SurfaceFormatKHR format {};
     vk::Extent2D extent {};

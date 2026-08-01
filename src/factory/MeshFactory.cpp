@@ -1,36 +1,69 @@
 #include "factory/MeshFactory.hpp"
 
-#include "logging/Logger.hpp"
+#include <cstddef>
 
 #include "renderer/resources/buffers/Buffer.hpp"
 
-vk::VertexInputBindingDescription2EXT get_binding_description()
+vk::VertexInputBindingDescription get_mesh_vertex_binding_description()
 {
-    vk::VertexInputBindingDescription2EXT description = {};
+    vk::VertexInputBindingDescription description = {};
 
     description.binding = 0;
-    description.stride = sizeof(Vertex);
+    description.stride = sizeof(MeshVertex);
     description.inputRate = vk::VertexInputRate::eVertex;
-    description.divisor = 1;
 
     return description;
 }
 
-std::vector<vk::VertexInputAttributeDescription2EXT> get_attribute_descriptions()
+std::array<vk::VertexInputAttributeDescription, 2> get_mesh_vertex_attribute_descriptions()
 {
-    std::vector<vk::VertexInputAttributeDescription2EXT> attributes(2);
+    std::array<vk::VertexInputAttributeDescription, 2> attributes;
 
     attributes[0].binding = 0;
     attributes[0].location = 0;
     attributes[0].format = vk::Format::eR32G32B32Sfloat;
-    attributes[0].offset = offsetof(Vertex, pos);
+    attributes[0].offset = offsetof(MeshVertex, pos);
 
     attributes[1].binding = 0;
     attributes[1].location = 1;
     attributes[1].format = vk::Format::eR32G32B32Sfloat;
-    attributes[1].offset = offsetof(Vertex, color);
+    attributes[1].offset = offsetof(MeshVertex, color);
 
     return attributes;
+}
+
+GraphicsPipelineConfig get_mesh_pipeline_config()
+{
+    vk::VertexInputBindingDescription meshBindingDescription = 
+        get_mesh_vertex_binding_description();
+
+    std::array<vk::VertexInputAttributeDescription, 2> meshAttributeDescriptions =
+        get_mesh_vertex_attribute_descriptions();
+
+    GraphicsPipelineConfig meshPipelineConfig = {};
+
+    meshPipelineConfig.vertexBindingDescriptions.push_back(meshBindingDescription);
+    for(const vk::VertexInputAttributeDescription& attribute : meshAttributeDescriptions)
+        meshPipelineConfig.vertexAttributeDescriptions.push_back(attribute);
+
+    meshPipelineConfig.topology = vk::PrimitiveTopology::eTriangleList;
+
+    meshPipelineConfig.cullMode = vk::CullModeFlagBits::eNone;
+    meshPipelineConfig.frontFace = vk::FrontFace::eCounterClockwise;
+
+    meshPipelineConfig.depthTest = true;
+    meshPipelineConfig.depthWrite = true;
+    meshPipelineConfig.depthCompareOp = vk::CompareOp::eLess;
+
+    meshPipelineConfig.colorBlendAttachment.blendEnable = vk::False;
+    meshPipelineConfig.colorBlendAttachment.colorWriteMask = (
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA 
+    );
+
+    return meshPipelineConfig;
 }
 
 Mesh build_cube(
@@ -40,10 +73,8 @@ Mesh build_cube(
     vk::Queue& queue,
     std::deque<std::function<void(VmaAllocator)>>& deletionQueue
 ) {
-    Logger* logger = Logger::get_logger();
-
-    Mesh mesh;
-    Vertex vertices[] = {
+    Mesh mesh = {};
+    MeshVertex vertices[] = {
         // top, red
         {{-0.5f, -0.5f,  0.5f}, {1, 0, 0}},
         {{ 0.5f, -0.5f,  0.5f}, {1, 0, 0}},
@@ -95,76 +126,69 @@ Mesh build_cube(
 
     const vk::DeviceSize ALLOC_SIZE = sizeof(vertices);
 
-    VkBuffer stagingBuffer, vertexBuffer;
-    VmaAllocation stagingAllocation, vertexAllocation;
-    VmaAllocationInfo stagingInfo, vertexInfo;
-
-    vk::BufferCreateInfo bufferInfo = {};
-    
-    bufferInfo.flags = vk::BufferCreateFlags();
-    bufferInfo.size = ALLOC_SIZE;
-    bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-
-    VkBufferCreateInfo bufferInfoHandle = bufferInfo;
-    VmaAllocationCreateInfo allocationInfo = {};
-
-    allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocationInfo.flags = (
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-        | VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT
-    );
- 
-    vmaCreateBuffer(
-        allocator, &bufferInfoHandle, &allocationInfo, &stagingBuffer, &stagingAllocation, &stagingInfo
+    AllocatedBuffer stagingBuffer = create_buffer(
+        allocator,
+        ALLOC_SIZE,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        VMA_MEMORY_USAGE_AUTO,
+        (
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT
+        ),
+        "Cube Staging Buffer"
     );
 
-    vmaSetAllocationName(allocator, stagingAllocation, "Staging Buffer");
-    vmaGetAllocationInfo(allocator, stagingAllocation, &stagingInfo);
+    if(!stagingBuffer.buffer) 
+        return {};
 
-    logger->log(stagingInfo);
+    if(!write_buffer(allocator, stagingBuffer, vertices, ALLOC_SIZE))
+    {
+        destroy_buffer(allocator, stagingBuffer);
+        return {};
+    }
 
-    void* dst;
-    vmaMapMemory(allocator, stagingAllocation, &dst);
-    memcpy(dst, vertices, ALLOC_SIZE);
-    vmaUnmapMemory(allocator, stagingAllocation);
-
-    bufferInfo.usage = (
-        vk::BufferUsageFlagBits::eVertexBuffer 
-        | vk::BufferUsageFlagBits::eTransferDst
+    AllocatedBuffer vertexBuffer = create_buffer(
+        allocator,
+        ALLOC_SIZE,
+        (
+            vk::BufferUsageFlagBits::eVertexBuffer |
+            vk::BufferUsageFlagBits::eTransferDst
+        ),
+        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        0,
+        "Cube MeshVertex Buffer"
     );
 
-    bufferInfoHandle = bufferInfo;
+    if(!vertexBuffer.buffer)
+    {
+        destroy_buffer(allocator, stagingBuffer);
+        return {};
+    }
 
-    allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    allocationInfo.flags = 0;
-
-    vmaCreateBuffer(
-        allocator, &bufferInfoHandle, &allocationInfo, &vertexBuffer, &vertexAllocation, &vertexInfo
+    bool copySuccessful = copy_buffer(
+        stagingBuffer.buffer, vertexBuffer.buffer, 
+        ALLOC_SIZE, device, queue, commandPool
     );
 
-    vmaSetAllocationName(allocator, vertexAllocation, "Vertex Buffer");
-    vmaGetAllocationInfo(allocator, vertexAllocation, &vertexInfo);
+    if(!copySuccessful)
+    {
+        destroy_buffer(allocator, vertexBuffer);
+        destroy_buffer(allocator, stagingBuffer);
 
-    logger->log(vertexInfo);
+        return {};
+    }
 
-    copy_buffer(stagingBuffer, vertexBuffer, ALLOC_SIZE, device, queue, commandPool);
-
-    mesh.buffer = vertexBuffer;
-    mesh.allocation = vertexAllocation;
-    mesh.offset = 0;
-    mesh.numOfVertices = static_cast<uint32_t>(
+    mesh.vertexBuffer = vertexBuffer;
+    mesh.vertexBufferOffset = 0;
+    mesh.vertexCount = static_cast<uint32_t>(
         sizeof(vertices) / sizeof(vertices[0])
     );
 
-    deletionQueue.push_back(
-        [stagingBuffer, stagingAllocation] (VmaAllocator allocator)->void {
-            vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
-        }
-    );
+    destroy_buffer(allocator, stagingBuffer);
 
     deletionQueue.push_back(
-        [mesh] (VmaAllocator allocator)->void {
-            vmaDestroyBuffer(allocator, mesh.buffer, mesh.allocation);
+        [mesh] (VmaAllocator allocator) mutable->void {
+            destroy_buffer(allocator, mesh.vertexBuffer);
         }
     );
 

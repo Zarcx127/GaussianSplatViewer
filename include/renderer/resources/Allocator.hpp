@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef ALLOCATOR_H
-#define ALLOCATOR_H
+#ifndef RENDERER_RESOURCES_ALLOCATOR_H
+#define RENDERER_RESOURCES_ALLOCATOR_H
 
 #include <vulkan/vulkan.hpp>
 #include <vma/vk_mem_alloc.h>

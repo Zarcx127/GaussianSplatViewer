@@ -1,5 +1,7 @@
 #include "renderer/core/Swapchain.hpp"
 
+#include <algorithm>
+
 #include "logging/Logger.hpp"
 
 #include "renderer/core/Image.hpp"
@@ -14,25 +16,48 @@ bool Swapchain::build(
 ) {
     Logger* logger = Logger::get_logger();
 
-    chain = vk::SwapchainKHR{};
+    chain = vk::SwapchainKHR();
     
     images.clear();
     imageViews.clear();
 
     imageCount = 0;
-    format = vk::SurfaceFormatKHR{};
-    extent = vk::Extent2D{};
+    format = vk::SurfaceFormatKHR();
+    extent = vk::Extent2D();
 
     SurfaceDetails support = query_surface_support(physicalDevice, surface);
 
+    if(support.formats.empty())
+    {
+        logger->print("Swapchain has no supported surface formats");
+        return false;
+    }
+
+    if(support.presentModes.empty())
+    {
+        logger->print("Swapchain has no supported present modes");
+        return false;
+    }
+
     format = choose_surface_format(support.formats);
+    if(format.format == vk::Format::eUndefined)
+    {
+        logger->print("Swapchain does not support required surface format");
+        return false;
+    }
+
     vk::PresentModeKHR presentMode = choose_present_mode(support.presentModes);
+    if(presentMode == vk::PresentModeKHR())
+    {
+        logger->print("Swapchain failed to choose present mode");
+        return false;
+    }
 
     extent = choose_extent(width, height, support.capabilities);
     if((extent.width == 0) || (extent.height == 0)) 
     {
         logger->print("Swapchain failed to create because drawable extent is invalid");
-        return true;
+        return false;
     }
 
     imageCount = support.capabilities.minImageCount + 1;
@@ -67,7 +92,7 @@ bool Swapchain::build(
     createInfo.clipped = vk::True;
     createInfo.oldSwapchain = vk::SwapchainKHR(nullptr);
 
-    vk::SwapchainKHR newSwapchain = {};
+    vk::SwapchainKHR newSwapchain = vk::SwapchainKHR();
     vk::Result swapChainAttempt = logicalDevice.createSwapchainKHR(
         &createInfo, nullptr, &newSwapchain
     );
@@ -98,11 +123,18 @@ bool Swapchain::build(
     }
 
     images = imagesAttempt.value;
+    imageCount = static_cast<uint32_t>(images.size());
 
     imageViews.resize(images.size());
     for(uint32_t i = 0; i < images.size(); i++)
     {
         imageViews[i] = create_image_view(logicalDevice, images[i], format.format);
+
+        if(!imageViews[i])
+        {
+            logger->print("Failed to create swapchain image view");
+            return false;
+        }
 
         vk::ImageView imageViewHandle = imageViews[i];
         deletionQueue.push_back(
@@ -166,14 +198,20 @@ vk::PresentModeKHR Swapchain::choose_present_mode(const std::vector<vk::PresentM
         if(mode == vk::PresentModeKHR::eMailbox)
         {
             logger->print("Swapchain using mailbox present mode");
-            
             return mode;
         }
     }
 
-    logger->print("Swapchain using fifo present mode");
+    for(const vk::PresentModeKHR& mode : presentModes)
+    {
+        if(mode == vk::PresentModeKHR::eFifo)
+        {
+            logger->print("Swapchain using fifo present mode");
+            return mode;
+        }
+    }
 
-    return vk::PresentModeKHR::eFifo;
+    return vk::PresentModeKHR();
 }
 
 vk::SurfaceFormatKHR Swapchain::choose_surface_format(const std::vector<vk::SurfaceFormatKHR>& formats)
@@ -188,5 +226,5 @@ vk::SurfaceFormatKHR Swapchain::choose_surface_format(const std::vector<vk::Surf
         }
     }
 
-    return formats[0];
+    return vk::SurfaceFormatKHR();
 }

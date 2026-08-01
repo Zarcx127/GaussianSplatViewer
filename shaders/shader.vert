@@ -11,10 +11,10 @@ layout(push_constant) uniform PushConstants
     mat4 invView;
     mat4 invProj;
     vec4  cameraPos;
-} pc;
+} pushConstants;
 
 void main()
 {
-    gl_Position = pc.mvp * vec4(vertexPos, 1.0);
+    gl_Position = pushConstants.mvp * vec4(vertexPos, 1.0);
     fragColor = vertexColor;
 }

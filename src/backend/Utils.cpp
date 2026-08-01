@@ -1,5 +1,6 @@
 #include "backend/Utils.hpp"
 
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -13,17 +14,54 @@ std::vector<uint32_t> utils::read_file(const char* filename)
     if(!file.is_open())
     {
         std::stringstream line;
-        line << "Failed to load " << filename << std::endl;
+        line << "Failed to load " << filename;
         logger->print(line.str().c_str());
         
         return {};
     }
     
-    size_t filesize = static_cast<size_t>(file.tellg());
-    std::vector<uint32_t> buffer(filesize / sizeof(uint32_t));
+    std::streampos fileSizePosition = file.tellg();
+    if(fileSizePosition == std::streampos(-1))
+    {
+        std::stringstream line;
+        line << "Failed to get file size for " << filename;
+        logger->print(line.str().c_str());
 
-    file.seekg(0);
-    file.read(reinterpret_cast<char*>(buffer.data()), filesize);
+        return {};
+    }
+
+    size_t fileSize = static_cast<size_t>(fileSizePosition);
+    if(fileSize == 0)
+    {
+        std::stringstream line;
+        line << filename << " is empty" << std::endl;
+        logger->print(line.str().c_str());
+
+        return {};
+    }
+
+    if((fileSize % sizeof(uint32_t)) != 0)
+    {
+        std::stringstream line;
+        line << filename << " size is not aligned to uint32_t";
+        logger->print(line.str().c_str());
+
+        return {};
+    }
+
+    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+
+    file.seekg(0, std::ios::beg);
+    file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
+
+    if(!file)
+    {
+        std::stringstream line;
+        line << "Failed to read " << filename;
+        logger->print(line.str().c_str());
+
+        return {};
+    }
 
     file.close();
     
@@ -43,7 +81,7 @@ bool utils::vector_compare(const std::vector<const char*>& vec1, const std::vect
         
         for(const char* str2 : vec2)
         {
-            if(strcmp(str1, str2) == 0)
+            if(std::strcmp(str1, str2) == 0)
             {
                 found = true;
                 break;

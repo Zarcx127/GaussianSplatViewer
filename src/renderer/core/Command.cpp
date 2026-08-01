@@ -1,5 +1,7 @@
 #include "renderer/core/Command.hpp"
 
+#include <vector>
+
 #include "logging/Logger.hpp"
 
 namespace
@@ -49,7 +51,7 @@ vk::CommandBuffer make_command_buffer(
     if(!commandBuffer)
     {
         logger->print("Failed to allocate command buffer");
-        return {};
+        return vk::CommandBuffer();
     }
 
     deletionQueue.push_back(
@@ -62,33 +64,80 @@ vk::CommandBuffer make_command_buffer(
     return commandBuffer;
 }
 
-void immediate_submit(
+bool immediate_submit(
     vk::Device device,
     vk::CommandPool commandPool,
     vk::Queue queue,
     const std::function<void(vk::CommandBuffer)>& function
 ) {
+    Logger* logger = Logger::get_logger();
+
     vk::CommandBuffer commandBuffer = allocate_command_buffer(device, commandPool);
+    if(!commandBuffer)
+    {
+        logger->print("Failed to allocate immediate command buffer");
+        return false;
+    }
 
     vk::CommandBufferBeginInfo beginInfo = {};
     beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-    (void) commandBuffer.begin(beginInfo);
+    if(commandBuffer.begin(beginInfo) != vk::Result::eSuccess)
+    {
+        device.freeCommandBuffers(commandPool, commandBuffer);
+        logger->print("Failed to start immediate command buffer");
+
+        return false;
+    }
+
     function(commandBuffer);
-    (void) commandBuffer.end();
+
+    if(commandBuffer.end() != vk::Result::eSuccess)
+    {
+        device.freeCommandBuffers(commandPool, commandBuffer);
+        logger->print("Failed to end immediate command buffer");
+
+        return false;
+    }
 
     vk::FenceCreateInfo fenceInfo = {};
-    vk::Fence fence = device.createFence(fenceInfo).value;
+    vk::ResultValue<vk::Fence> fenceAttempt = device.createFence(fenceInfo);
+    if(fenceAttempt.result != vk::Result::eSuccess)
+    {
+        device.freeCommandBuffers(commandPool, commandBuffer);
+        logger->print("Failed to create immediate submit fence");
+
+        return false;
+    }
+
+    vk::Fence fence = fenceAttempt.value;
 
     vk::SubmitInfo submitInfo = {};
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    (void) queue.submit(1, &submitInfo, fence);
-    (void) device.waitForFences(1, &fence, vk::True, UINT64_MAX);
+    if(queue.submit(1, &submitInfo, fence) != vk::Result::eSuccess)
+    {
+        device.destroyFence(fence);
+        device.freeCommandBuffers(commandPool, commandBuffer);
+        logger->print("Failed to submit immediate command buffer");
+
+        return false;
+    }
+    
+    if(device.waitForFences(1, &fence, vk::True, UINT64_MAX) != vk::Result::eSuccess)
+    {
+        device.destroyFence(fence);
+        device.freeCommandBuffers(commandPool, commandBuffer);
+        logger->print("Failed to wait for immediate submit fence");
+    
+        return false;
+    }
 
     device.destroyFence(fence);
     device.freeCommandBuffers(commandPool, commandBuffer);
+
+    return true;
 }
 
 namespace 
@@ -101,6 +150,15 @@ namespace
         allocInfo.setCommandPool(commandPool);
         allocInfo.setLevel(vk::CommandBufferLevel::ePrimary);
 
-        return device.allocateCommandBuffers(allocInfo).value[0];
+        vk::ResultValue<std::vector<vk::CommandBuffer>> commandBufferAttempt =
+            device.allocateCommandBuffers(allocInfo);
+        
+        if(commandBufferAttempt.result != vk::Result::eSuccess)
+            return vk::CommandBuffer();
+
+        if(commandBufferAttempt.value.empty())
+            return vk::CommandBuffer();
+
+        return commandBufferAttempt.value[0];
     }
 }

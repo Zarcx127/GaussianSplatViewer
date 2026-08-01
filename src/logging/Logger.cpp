@@ -1,5 +1,7 @@
 #include "logging/Logger.hpp"
 
+#include "BuildConfig.hpp"
+
 using std::vector;
 
 Logger* Logger::get_logger()
@@ -7,10 +9,10 @@ Logger* Logger::get_logger()
     static Logger logger;
     return &logger;
 }
-    
+
 void Logger::set_mode(bool mode)
 {
-    m_enabled = mode;
+    m_enabled = build::enableLogging && mode;
 }
 
 bool Logger::is_enabled()
@@ -98,6 +100,8 @@ void Logger::print_list(const char** list, uint32_t count, const char* prefix)
 
 void Logger::print_vector(const vector<const char*>& vec, const char* prefix)
 {
+    if(!m_enabled) return;
+
     for(const char* str : vec)
         cout << prefix << str << endl;
 }
@@ -122,7 +126,7 @@ void Logger::log(const vk::PhysicalDevice& device)
             break;
         
         case Device::eIntegratedGpu:
-            cout << "Intergrated GPU";
+            cout << "Integrated GPU";
             break;
         
         case Device::eVirtualGpu:
@@ -256,7 +260,7 @@ void Logger::log(const VmaAllocationInfo& info, const char* prefix)
     cout << prefix << "memory type: " << info.memoryType << endl;
     cout << prefix << "memory object: " << info.deviceMemory << endl;
     cout << prefix << "offset: " << info.offset << endl;
-    cout << prefix << "size: " << info.memoryType << endl;
+    cout << prefix << "size: " << info.size << endl;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -377,7 +381,7 @@ vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits)
             "transient attachment: implementations may support using memory allocations "
             "with the VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT to back an image with this usage. "
             "This bit can be set for any image that can be used to create a VkImageView suitable "
-            "for use as a color, reslve, depth/stencil, or input attachment."
+            "for use as a color, resolve, depth/stencil, or input attachment."
         );
 	}
 

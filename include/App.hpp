@@ -6,7 +6,9 @@
 #include <mutex>
 #include <thread>
 
-#include <glfw/glfw3.h>
+#include <vulkan/vulkan.hpp>
+
+#include <GLFW/glfw3.h>
 
 #include "AppState.hpp"
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef SHADER_INTERFACE_H
-#define SHADER_INTERFACE_H
+#ifndef RENDERER_RESOURCES_SHADERS_SHADER_INTERFACE_H
+#define RENDERER_RESOURCES_SHADERS_SHADER_INTERFACE_H
 
 #include <cstdint>
 #include <vector>

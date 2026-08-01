@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef BACKEND_UTILS_H
+#define BACKEND_UTILS_H
 
 #include <vector>
 #include <cstdint>

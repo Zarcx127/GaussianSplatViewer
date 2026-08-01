@@ -1,19 +1,25 @@
 #pragma once
 
-#ifndef DEVICE_H
-#define DEVICE_H
+#ifndef RENDERER_CORE_DEVICE_H
+#define RENDERER_CORE_DEVICE_H
 
+#include <cstdint>
 #include <deque>
 #include <vector>
 #include <functional>
 
 #include <vulkan/vulkan.hpp>
 
-bool supports(const vk::PhysicalDevice& device, std::vector<const char*> requestedExtensions);
+struct PhysicalDeviceSelection
+{
+    vk::PhysicalDevice device;
+    uint32_t queueFamilyIndex { UINT32_MAX };
+};
 
-bool is_suitable(const vk::PhysicalDevice device);
-
-vk::PhysicalDevice choose_physical_device(const vk::Instance instance);
+PhysicalDeviceSelection choose_physical_device(
+    vk::Instance instance, 
+    vk::SurfaceKHR surface
+);
 
 uint32_t find_queue_family_index(
     vk::PhysicalDevice physicalDevice, 
@@ -23,7 +29,7 @@ uint32_t find_queue_family_index(
 
 vk::Device create_logical_device(
     vk::PhysicalDevice physicalDevice, 
-    vk::SurfaceKHR surface, 
+    uint32_t queueFamilyIndex,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 );
 
