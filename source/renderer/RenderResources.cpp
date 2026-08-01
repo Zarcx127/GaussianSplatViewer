@@ -1,21 +1,36 @@
 ﻿#include "renderer/RenderResources.hpp"
 
 #include "factory/SplatFactory.hpp"
+#include "factory/SplatFrameFactory.hpp"
 
 #include "renderer/core/Command.hpp"
 #include "renderer/core/Image.hpp"
 
 #include "renderer/resources/descriptors/Descriptors.hpp"
+
 #include "renderer/resources/shaders/Shader.hpp"
 
 bool RenderResources::build(
     RenderResourcesContext& context,
     uint32_t width,
     uint32_t height,
-    uint32_t framesInFlight
+    uint32_t framesInFlight,
+    const SplatBuffer& splatBuffer,
+    uint32_t entryCapacity
 ) {
-    if((width == 0) || (height == 0) || (framesInFlight == 0)) 
+    uint32_t splatCapacity = splatBuffer.splatCount;
+
+    if(
+        !context.splatFrameDescriptorSetLayout ||
+        !splatBuffer.buffer.buffer ||
+        (width == 0) || 
+        (height == 0) || 
+        (framesInFlight == 0) ||
+        (entryCapacity == 0) ||
+        (splatCapacity == 0)
+    ) {
         return false;
+    }
 
     if(
         !context.logicalDevice ||
@@ -40,17 +55,30 @@ bool RenderResources::build(
         return false;
     }
 
-    uint32_t descriptorSetCount = static_cast<uint32_t>(m_swapchain.imageViews.size());
+    uint32_t swapchainDescriptorCount = 
+        static_cast<uint32_t>(m_swapchain.imageViews.size());
+
+    uint32_t splatFrameDescriptorCount = framesInFlight;
+    uint32_t descriptorSetCount = (
+        swapchainDescriptorCount + splatFrameDescriptorCount
+    );
 
     DescriptorPoolBuilder descriptorPoolBuilder(context.logicalDevice);
-    descriptorPoolBuilder.add_entry(vk::DescriptorType::eStorageImage, descriptorSetCount);
 
-    m_descriptorPool = descriptorPoolBuilder.build(descriptorSetCount, m_deletionQueue);
-    if(!m_descriptorPool)
-    {
-        destroy(context);
-        return false;
-    }
+    descriptorPoolBuilder.add_entry(
+        vk::DescriptorType::eStorageImage,
+        swapchainDescriptorCount
+    );
+
+    descriptorPoolBuilder.add_entry(
+        vk::DescriptorType::eStorageBuffer,
+        (splatFrameDescriptorCount * 9)
+    );
+
+    m_descriptorPool = descriptorPoolBuilder.build(
+        descriptorSetCount,
+        m_deletionQueue
+    );
 
     m_swapchainImageDescriptorSets.clear();
     m_swapchainImageDescriptorSets.resize(m_swapchain.imageViews.size());
@@ -148,8 +176,89 @@ bool RenderResources::build(
             return false;
         }
 
+        SplatFrameResources splatResources = build_splat_frame_resources(
+            context.allocator,
+            splatCapacity,
+            entryCapacity,
+            m_vmaDeletionQueue
+        );
+
+        if(!splatResources.projectedSplats.buffer)
+        {
+            destroy(context);
+            return false;
+        }
+
+        vk::DescriptorSet splatFrameDescriptorSet = allocate_descriptor_set(
+            context.logicalDevice,
+            m_descriptorPool,
+            context.splatFrameDescriptorSetLayout
+        );
+
+        if(!splatFrameDescriptorSet)
+        {
+            destroy(context);
+            return false;
+        }
+
+/// FLAG ///
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatBuffer.buffer.buffer, 0, splatBuffer.buffer.size, 0
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.projectedSplats.buffer,
+            0, splatResources.projectedSplats.size, 1
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.visibleSplatIndices.buffer,
+            0, splatResources.visibleSplatIndices.size, 2
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.sortKeys[0].buffer,
+            0, splatResources.sortKeys[0].size, 3
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.sortKeys[1].buffer,
+            0, splatResources.sortKeys[1].size, 4
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.entrySplatIndices[0].buffer,
+            0, splatResources.entrySplatIndices[0].size, 5
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.entrySplatIndices[1].buffer,
+            0, splatResources.entrySplatIndices[1].size, 6
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.counters.buffer,
+            0, splatResources.counters.size, 7
+        );
+
+        write_storage_buffer_descriptor(
+            context.logicalDevice, splatFrameDescriptorSet,
+            splatResources.drawCommand.buffer,
+            0, splatResources.drawCommand.size, 8
+        );
+////////
+
         m_frames.emplace_back(
             context.logicalDevice, commandBuffer, 
+            splatResources, splatFrameDescriptorSet,
             static_cast<uint32_t>(m_swapchain.imageCount),
             m_deletionQueue
         );

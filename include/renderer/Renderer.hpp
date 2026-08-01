@@ -54,6 +54,7 @@ private:
 
     vk::DescriptorSetLayout m_descriptorSetLayout {};
     vk::DescriptorSetLayout m_sphericalHarmonicDescriptorSetLayout {};
+    vk::DescriptorSetLayout m_splatFrameDescriptorSetLayout {};
 
     vk::PipelineLayout m_pipelineLayout {};
 

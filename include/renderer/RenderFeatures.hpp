@@ -32,6 +32,7 @@ struct RenderFeatureFrameInfo
     
     vk::DescriptorSet sphericalHarmonicDescriptorSet;
     vk::Pipeline backgroundPipeline;
+    vk::Pipeline splatCullPipeline;
 };
 
 class RenderFeatures
@@ -61,6 +62,7 @@ private:
     vk::DescriptorSet m_sphericalHarmonicDescriptorSet {};
 
     vk::Pipeline m_backgroundPipeline {};
+    vk::Pipeline m_splatCullPipeline {};
 };
 
 #endif

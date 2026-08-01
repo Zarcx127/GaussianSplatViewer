@@ -4,6 +4,7 @@
 
 #include "renderer/core/Image.hpp"
 
+#include "renderer/passes/SplatCullPass.hpp"
 #include "renderer/passes/BackgroundPass.hpp"
 #include "renderer/passes/SplatGaussianPass.hpp"
 
@@ -53,10 +54,16 @@ bool record_frame_commands(
         !context.target.depthImage.imageView ||
         !context.pipelineLayout ||
         !context.splatPointPipeline ||
+        !context.splatFrameDescriptorSet ||
         !context.features.backgroundPipeline ||
+        !context.features.splatCullPipeline ||
         !context.features.sphericalHarmonicBuffer.buffer.buffer ||
         !context.features.sphericalHarmonicDescriptorSet ||
         !context.features.splatBuffer.buffer.buffer ||
+        !context.splatResources.projectedSplats.buffer ||
+        !context.splatResources.sortKeys[0].buffer ||
+        !context.splatResources.counters.buffer ||
+        !context.splatResources.drawCommand.buffer ||
         (context.features.splatBuffer.splatCount == 0)
     ) {
         logger->print("Invalid render frame resource");
@@ -100,7 +107,10 @@ bool record_frame_commands(
 
     commandBuffer.pushConstants(
         context.pipelineLayout,
-        vk::ShaderStageFlagBits::eVertex,
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex 
+        ),
         0,
         sizeof(FramePushConstant),
         &pushConstants
@@ -112,6 +122,15 @@ bool record_frame_commands(
         context.pipelineLayout, 
         context.target.storageDescriptorSet, 
         context.target.extent
+    );
+
+    record_splat_cull_pass(
+        commandBuffer,
+        context.features.splatCullPipeline,
+        context.pipelineLayout,
+        context.features.sphericalHarmonicDescriptorSet,
+        context.splatFrameDescriptorSet,
+        context.splatResources
     );
 
     transition_image_layout(
@@ -134,8 +153,8 @@ bool record_frame_commands(
         commandBuffer, 
         context.splatPointPipeline, 
         context.pipelineLayout,
-        context.features.sphericalHarmonicDescriptorSet,
-        context.features.splatBuffer
+        context.splatFrameDescriptorSet,
+        context.splatResources
     );
 
     commandBuffer.endRenderingKHR();

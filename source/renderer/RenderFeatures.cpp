@@ -97,6 +97,17 @@ bool RenderFeatures::build(RenderFeaturesContext& context, const char* splatPath
         return false;
     }
 
+    m_splatCullPipeline = make_compute_pipeline(
+        context.logicalDevice, "shaders/bin/SplatCull.comp.spv",
+        context.pipelineLayout, m_deletionQueue
+    );
+
+    if(!m_splatCullPipeline)
+    {
+        destroy(context);
+        return false;
+    }
+
     return true;
 }
 
@@ -128,6 +139,7 @@ void RenderFeatures::destroy(RenderFeaturesContext& context)
     m_sphericalHarmonicDescriptorSet = vk::DescriptorSet();
 
     m_backgroundPipeline = vk::Pipeline();
+    m_splatCullPipeline = vk::Pipeline();
 }
 
 RenderFeatureFrameInfo RenderFeatures::frame_info() const
@@ -136,6 +148,7 @@ RenderFeatureFrameInfo RenderFeatures::frame_info() const
         m_splatBuffer,
         m_sphericalHarmonicBuffer,
         m_sphericalHarmonicDescriptorSet,
-        m_backgroundPipeline
+        m_backgroundPipeline,
+        m_splatCullPipeline
     };
 }

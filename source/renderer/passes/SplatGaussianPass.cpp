@@ -4,8 +4,8 @@ void record_splat_gaussian_pass(
     vk::CommandBuffer commandBuffer,
     vk::Pipeline pipeline,
     vk::PipelineLayout pipelineLayout,
-    vk::DescriptorSet sphericalHarmonicDescriptorSet,
-    const SplatBuffer& splatBuffer
+    vk::DescriptorSet splatFrameDescriptorSet,
+    const SplatFrameResources& resources
 ) {
     commandBuffer.bindPipeline(
         vk::PipelineBindPoint::eGraphics, 
@@ -15,16 +15,17 @@ void record_splat_gaussian_pass(
     commandBuffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipelineLayout,
+        2,
         1,
-        1,
-        &sphericalHarmonicDescriptorSet,
+        &splatFrameDescriptorSet,
         0,
         nullptr
     );
 
-    commandBuffer.bindVertexBuffers(
-        0, 1, &(splatBuffer.buffer.buffer), &(splatBuffer.bufferOffset)
+    commandBuffer.drawIndirect(
+        resources.drawCommand.buffer,
+        0,
+        1,
+        sizeof(GpuSplatDrawCommand)
     );
-
-    commandBuffer.draw(6, splatBuffer.splatCount, 0, 0);
 }

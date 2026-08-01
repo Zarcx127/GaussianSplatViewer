@@ -1,16 +1,12 @@
 ﻿#include "factory/SplatFactory.hpp"
 
 #include <vector>
-#include <cstddef>
 #include <algorithm>
 
 #include "renderer/resources/buffers/Buffer.hpp"
 
 namespace
 {
-    vk::VertexInputBindingDescription get_splat_vertex_binding_description();
-    std::array<vk::VertexInputAttributeDescription, 4> get_splat_vertex_attribute_descriptions();
-
     std::vector<GpuSplat> pack_splats(const SplatCloud& cloud);
 
     AllocatedBuffer upload_splat_data(
@@ -30,17 +26,7 @@ namespace
 
 GraphicsPipelineConfig get_splat_gaussian_pipeline_config()
 {
-    vk::VertexInputBindingDescription bindingDescription = 
-        get_splat_vertex_binding_description();
-
-    std::array<vk::VertexInputAttributeDescription, 4> atrributeDescription =
-        get_splat_vertex_attribute_descriptions();
-
     GraphicsPipelineConfig pipelineConfig = {};
-
-    pipelineConfig.vertexBindingDescriptions.push_back(bindingDescription);
-    for(const vk::VertexInputAttributeDescription& attribute : atrributeDescription)
-        pipelineConfig.vertexAttributeDescriptions.push_back(attribute);
 
     pipelineConfig.topology = vk::PrimitiveTopology::eTriangleList;
 
@@ -163,44 +149,6 @@ SphericalHarmonicBuffer build_spherical_harmonic_buffer(
 
 namespace
 {
-    vk::VertexInputBindingDescription get_splat_vertex_binding_description()
-    {
-        vk::VertexInputBindingDescription description = {};
-
-        description.binding = 0;
-        description.stride = sizeof(GpuSplat);
-        description.inputRate = vk::VertexInputRate::eInstance;
-
-        return description;
-    }
-
-    std::array<vk::VertexInputAttributeDescription, 4> get_splat_vertex_attribute_descriptions()
-    {
-        std::array<vk::VertexInputAttributeDescription, 4> attributes;
-
-        attributes[0].binding = 0;
-        attributes[0].location = 0;
-        attributes[0].format = vk::Format::eR32G32B32Sfloat;
-        attributes[0].offset = offsetof(GpuSplat, position);
-
-        attributes[1].binding = 0;
-        attributes[1].location = 1;
-        attributes[1].format = vk::Format::eR32G32B32A32Sfloat;
-        attributes[1].offset = offsetof(GpuSplat, color);
-
-        attributes[2].binding = 0;
-        attributes[2].location = 2;
-        attributes[2].format = vk::Format::eR32G32B32Sfloat;
-        attributes[2].offset = offsetof(GpuSplat, logScale);
-
-        attributes[3].binding = 0;
-        attributes[3].location = 3;
-        attributes[3].format = vk::Format::eR32G32B32A32Sfloat;
-        attributes[3].offset = offsetof(GpuSplat, rotation);
-
-        return attributes;
-    }
-
     std::vector<GpuSplat> pack_splats(const SplatCloud& cloud)
     {
         std::vector<GpuSplat> gpuSplats;

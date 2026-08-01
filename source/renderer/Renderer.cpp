@@ -145,7 +145,10 @@ bool Engine::init(uint32_t width, uint32_t height)
         return false;
     }
 
-    DescriptorSetLayoutBuilder descriptorSetLayoutBuilder(m_vulkanContext.logical_device_ref());
+    DescriptorSetLayoutBuilder descriptorSetLayoutBuilder(
+        m_vulkanContext.logical_device_ref()
+    );
+    
     descriptorSetLayoutBuilder.add_entry(
         vk::ShaderStageFlagBits::eCompute, vk::DescriptorType::eStorageImage
     );
@@ -164,7 +167,10 @@ bool Engine::init(uint32_t width, uint32_t height)
     );
 
     sphericalHarmonicLayoutBuilder.add_entry(
-        vk::ShaderStageFlagBits::eVertex,
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex
+        ),
         vk::DescriptorType::eStorageBuffer
     );
 
@@ -181,8 +187,83 @@ bool Engine::init(uint32_t width, uint32_t height)
         m_sphericalHarmonicDescriptorSetLayout
     );
 
+    DescriptorSetLayoutBuilder splatFrameLayoutBuilder(
+        m_vulkanContext.logical_device_ref()
+    );
+
+// FLAG ////////
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex
+        ),
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex
+        ),
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex
+        ),
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+    splatFrameLayoutBuilder.add_entry(
+        vk::ShaderStageFlagBits::eCompute,
+        vk::DescriptorType::eStorageBuffer
+    );
+
+////////////////
+
+    m_splatFrameDescriptorSetLayout = 
+        splatFrameLayoutBuilder.build(m_interfaceDeletionQueue);
+    
+    if(!m_splatFrameDescriptorSetLayout)
+    {
+        shutdown();
+        return false;
+    }
+
+    m_renderInterface.add_descriptor_set_layout(m_splatFrameDescriptorSetLayout);
+
     m_renderInterface.add_push_constant_range(
-        vk::ShaderStageFlagBits::eVertex,
+        (
+            vk::ShaderStageFlagBits::eCompute |
+            vk::ShaderStageFlagBits::eVertex
+        ),
         0U, sizeof(FramePushConstant)
     );
 
@@ -346,6 +427,8 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     RenderFrameContext renderContext = {
         renderTarget,
+        frame.splatResources,
+        frame.splatFrameDescriptorSet,
         m_renderResources.splat_gaussian_pipeline(),
         m_pipelineLayout,
         featureInfo
@@ -448,9 +531,16 @@ void Engine::destroy_render_features()
 
 bool Engine::init_render_resources(uint32_t width, uint32_t height)
 {
+    RenderFeatureFrameInfo featureInfo = m_renderFeatures.frame_info();
+
+    uint32_t splatCapacity = featureInfo.splatBuffer.splatCount;
+    uint32_t entryCapacity = splatCapacity;
+
     RenderResourcesContext context = make_render_resources_context();
+
     return m_renderResources.build(
-        context, width, height, MAX_FRAMES_IN_FLIGHT
+        context, width, height, MAX_FRAMES_IN_FLIGHT,
+        featureInfo.splatBuffer, entryCapacity
     );
 }
 
@@ -481,6 +571,7 @@ RenderResourcesContext Engine::make_render_resources_context()
         m_vulkanContext.allocator(),
         m_vulkanContext.command_pool(),
         m_vulkanContext.graphics_queue(),
+        m_splatFrameDescriptorSetLayout,
         m_pipelineLayout,
         m_renderInterface
     };
@@ -502,7 +593,10 @@ void Engine::shutdown()
         m_interfaceDeletionQueue.pop_back();
     }
 
+    m_descriptorSetLayout = vk::DescriptorSetLayout();
     m_sphericalHarmonicDescriptorSetLayout = vk::DescriptorSetLayout();
+    m_splatFrameDescriptorSetLayout = vk::DescriptorSetLayout();
+
     m_pipelineLayout = vk::PipelineLayout();
     m_renderInterface = ShaderInterface();
 

@@ -9,10 +9,15 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "renderer/resources/splats/SplatFrame.hpp"
+
 class Frame
 {
 public:
     vk::CommandBuffer commandBuffer;
+    SplatFrameResources splatResources;
+
+    vk::DescriptorSet splatFrameDescriptorSet;
 
     vk::Semaphore imageAcquiredSemaphore;
     std::vector<vk::Semaphore> renderFinishedSemaphores;
@@ -21,6 +26,8 @@ public:
     Frame(
         vk::Device device, 
         vk::CommandBuffer commandBuffer,
+        const SplatFrameResources& splatResources,
+        vk::DescriptorSet splatFrameDescriptorSet,
         uint32_t swapchainImageCount,
         std::deque<std::function<void(vk::Device)>>& deletionQueue
     );

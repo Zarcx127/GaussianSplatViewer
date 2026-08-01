@@ -14,7 +14,10 @@
 #include "renderer/core/Swapchain.hpp"
 
 #include "renderer/resources/images/AllocatedImage.hpp"
+
 #include "renderer/resources/shaders/ShaderInterface.hpp"
+
+#include "renderer/resources/splats/Splat.hpp"
 
 struct RenderResourcesContext
 {
@@ -27,6 +30,7 @@ struct RenderResourcesContext
     vk::CommandPool commandPool;
     vk::Queue graphicsQueue;
 
+    vk::DescriptorSetLayout splatFrameDescriptorSetLayout;
     vk::PipelineLayout pipelineLayout;
 
     const ShaderInterface& renderInterface;
@@ -48,7 +52,9 @@ public:
         RenderResourcesContext& context,
         uint32_t width,
         uint32_t height,
-        uint32_t framesInFlight
+        uint32_t framesInFlight,
+        const SplatBuffer& splatBuffer,
+        uint32_t entryCapacity
     );
 
     void destroy(RenderResourcesContext& context);

@@ -9,6 +9,8 @@
 
 #include "renderer/resources/images/AllocatedImage.hpp"
 
+#include "renderer/resources/splats/SplatFrame.hpp"
+
 #include "renderer/RenderFeatures.hpp"
 
 struct FramePushConstant
@@ -33,6 +35,10 @@ struct RenderTarget
 struct RenderFrameContext
 {
     const RenderTarget& target;
+    const SplatFrameResources& splatResources;
+
+    vk::DescriptorSet splatFrameDescriptorSet;
+    
     const vk::Pipeline& splatPointPipeline;
     const vk::PipelineLayout& pipelineLayout;
 
