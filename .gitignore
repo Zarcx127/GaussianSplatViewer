@@ -1,0 +1,10 @@
+/*/
+
+!/.vscode/
+!/include/
+!/resource/
+!/scripts/
+!/shaders/
+!/source/
+
+/include/generated/
