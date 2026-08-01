@@ -16,7 +16,7 @@ Most GPUs including integrated ones like Intel UHD Graphics should have this by 
 
 ***Note:***<br>
 Since GPU cap is not currently implemented it would utilise all GPU resources if unrestricted.
-This should not cause any problems problem. 
+This should not cause any problems. 
 To prevent overheating, close the viewer when it is not in use.
 
 ### Troubleshooting (Running)

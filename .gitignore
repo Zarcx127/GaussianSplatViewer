@@ -1,4 +1,7 @@
 /*/
+*.exe
+*.zip
+.lastMode
 
 !/.vscode/
 !/include/
