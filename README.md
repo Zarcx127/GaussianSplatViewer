@@ -34,7 +34,7 @@ This is to reduce the number of splats that need to be processed, so you will ge
 
 The camera controls are similar to most 3D editors.
 
-- **RMB:** Look around
+- **Right Mouse Button (RMB):** Look around
 - **RMB + W:** Move forward
 - **RMB + A:** Move left
 - **RMB + S:** Move backward
