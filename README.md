@@ -82,7 +82,7 @@ The executable is inside the attached zip.
 ### Hardware requirements (for building)
 
 1. GPU with Vulkan support (required)
-2. 16GB ram at least (required)
+2. 16GB RAM at least (required)
 3. 1GB Storage at least (required)
 4. Quad-core processor or better (recommended)
 
