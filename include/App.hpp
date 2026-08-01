@@ -10,13 +10,13 @@
 
 #include <GLFW/glfw3.h>
 
-#include "AppState.hpp"
-
 #include "logging/Logger.hpp"
 
 #include "input/InputState.hpp"
 
 #include "renderer/Renderer.hpp"
+
+#include "AppState.hpp"
 
 class App
 {

@@ -9,7 +9,7 @@ CURR_DIR := $(subst \,/,$(abspath .))/
 
 SHD_DIR := $(CURR_DIR)shaders/
 INC_DIR := $(CURR_DIR)include/
-SRC_DIR := $(CURR_DIR)src/
+SRC_DIR := $(CURR_DIR)source/
 OBJ_DIR := $(CURR_DIR)obj/$(mode)/
 
 MODE_FILE := $(CURR_DIR).lastMode
@@ -26,20 +26,25 @@ FLAGS_OBJ := -std=c++17 -O2 -Werror -MMD -MP \
 	-DGLFW_INCLUDE_NONE \
 	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 
+GLSLC = glslc
+FLAGS_SPV = -MD
+
 INCLUDE := -I$(INC_DIR) -I$(subst \,/,$(VULKAN_SDK))/Include
 FLAGS_EXE := -std=c++17 -O2 \
 	-L$(subst \,/,$(VULKAN_SDK))/Lib \
 	-static -lvulkan-1 -lglfw3 -lgdi32
 
 SRCs_RAW := $(shell powershell -Command "Get-ChildItem -Path $(SRC_DIR) -Recurse -Filter *.cpp | ForEach-Object { $$_.FullName }")
-SRCs := $(subst \,/,$(SRCs_RAW))
-OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
-DEPs := $(OBJs:.o=.d)
-
 SHADERS_RAW := $(shell powershell -Command "Get-ChildItem -File $(SHD_DIR) | ForEach-Object { $$_.FullName }")
+
+SRCs := $(subst \,/,$(SRCs_RAW))
 SHADERS := $(subst \,/,$(SHADERS_RAW))
 
+OBJs := $(patsubst $(SRC_DIR)%,$(OBJ_DIR)%,$(SRCs:.cpp=.o))
 SPVs := $(addsuffix .spv,$(addprefix $(SHD_DIR)bin/,$(notdir $(SHADERS))))
+
+OBJ_DEPs := $(OBJs:.o=.d)
+SPV_DEPs := $(addsuffix .d,$(SPVs))
 
 ifeq ($(mode), debug)
 	FLAGS_OBJ += -DDEBUG
@@ -164,14 +169,14 @@ release:
 
 $(SHD_DIR)bin/%.spv: $(SHD_DIR)% 
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
-	glslc "$<" -o "$@"
-
-$(EXE): $(SPVs) $(OBJs)
-	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
+	$(GLSLC) $(FLAGS_SPV) "$<" -o "$@"
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
 	@if not exist "$(dir $@)" mkdir "$(dir $@)"
 	$(CC) $(INCLUDE) $(FLAGS_OBJ) -c "$<" -o "$@"
+
+$(EXE): $(SPVs) $(OBJs)
+	$(CC) $(INCLUDE) $(OBJs) -o "$(CURR_DIR)$(EXE)" $(FLAGS_EXE) 
 
 clean:
 	@$(MAKE_NP) clean_obj mode=debug
@@ -247,4 +252,4 @@ delete:
 $(word 2, $(MAKECMDGOALS)) $(word 3, $(MAKECMDGOALS)):
 	@:
 
--include $(DEPs)
+-include $(OBJ_DEPs) $(SPV_DEPs)

@@ -9,7 +9,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vma/vk_mem_alloc.h>
 
-#include "renderer/resources/meshes/Mesh.hpp"
+#include "renderer/resources/splats/Splat.hpp"
 
 struct RenderFeaturesContext
 {
@@ -25,8 +25,8 @@ struct RenderFeaturesContext
 
 struct RenderFeatureFrameInfo
 {
-    const Mesh& debugMesh;
-    vk::Pipeline worldGridPipeline;
+    const SplatBuffer& splatBuffer;
+    vk::Pipeline backgroundPipeline;
 };
 
 class RenderFeatures
@@ -40,7 +40,7 @@ public:
     RenderFeatures(RenderFeatures&&) = delete;
     RenderFeatures& operator=(RenderFeatures&&) = delete;
 
-    bool build(RenderFeaturesContext& context);
+    bool build(RenderFeaturesContext& context, const char* splatPath);
     void destroy(RenderFeaturesContext& context);
 
     RenderFeatureFrameInfo frame_info() const;
@@ -49,8 +49,9 @@ private:
     std::deque<std::function<void(vk::Device)>> m_deletionQueue;
     std::deque<std::function<void(VmaAllocator)>> m_vmaDeletionQueue;
 
-    Mesh m_debugMesh;
-    vk::Pipeline m_worldGridPipeline {};
+    SplatBuffer m_splatBuffer;
+
+    vk::Pipeline m_backgroundPipeline {};
 };
 
 #endif

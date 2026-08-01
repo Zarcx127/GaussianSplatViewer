@@ -64,7 +64,7 @@ public:
 
     const AllocatedImage& depth_image() const;
 
-    vk::Pipeline mesh_pipeline() const;
+    vk::Pipeline splat_point_pipeline() const;
 
     vk::DescriptorSet swapchain_storage_descriptor_set(uint32_t imageIndex) const;
     uint32_t swapchain_storage_descriptor_set_count() const;
@@ -85,7 +85,7 @@ private:
     vk::DescriptorPool m_descriptorPool {};
     std::vector<vk::DescriptorSet> m_swapchainImageDescriptorSets;
 
-    vk::Pipeline m_meshPipeline {};
+    vk::Pipeline m_splatPointPipeline {};
 
     std::vector<Frame> m_frames;
     std::vector<vk::Fence> m_imagesInFlight;

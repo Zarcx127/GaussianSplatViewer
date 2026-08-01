@@ -11,7 +11,7 @@ $normalized = $FilePath -replace '\\','/'
 
 $filename = Split-Path $normalized -Leaf
 
-if($normalized -match 'src/(.*)') 
+if($normalized -match 'source/(.*)') 
 {
     $relPath = $Matches[1]
 }
@@ -77,11 +77,22 @@ if($Type -eq "hpp")
 }
 else
 {
-    $includePath = "$relPath.hpp"
-    $content = @"
+    $headerPath = ($normalized -replace '(^|/)source/', '${1}include/') + '.hpp'
+    if(Test-Path -LiteralPath $headerPath -PathType Leaf)
+    {
+        $includePath = "$relPath.hpp"
+        $content = @"
 #include `"$includePath`"
 
 "@
+    }
+    else
+    {
+        $content = @"
+// no matching header
+"@
+        Write-Warning "Corresponding header does not exist"
+    }
 }
 
 $target = "$FilePath.$Type"

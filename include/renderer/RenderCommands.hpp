@@ -33,9 +33,7 @@ struct RenderTarget
 struct RenderFrameContext
 {
     const RenderTarget& target;
-
-    const vk::Pipeline& meshPipeline;
-
+    const vk::Pipeline& splatPointPipeline;
     const vk::PipelineLayout& pipelineLayout;
 
     RenderFeatureFrameInfo features;
