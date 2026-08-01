@@ -98,7 +98,7 @@ Unfortunately, this is a requirement to run and compile the code as I have set s
 - `VK_ADD_LAYER_PATH`
 
 Do note that the build will fail on other editors.
-(Unless you have configured the environment variables yourself) 
+(Unless you have configured the environment variables manually) 
 
 Even if you have C++ and Vulkan installed, this still needs to be run.
 This is to ensure that all dependencies are the same as mine to prevent any unexpected errors.
