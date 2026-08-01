@@ -1,4 +1,21 @@
-﻿#include "renderer/RenderResources.hpp"
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#include "renderer/RenderResources.hpp"
 
 #include "factory/SplatFrameFactory.hpp"
 
@@ -8,10 +25,37 @@
 
 #include "renderer/resources/splats/SplatFrameDescriptors.hpp"
 
-bool RenderResources::build(
+bool RenderResources::build_core_resources(
     RenderResourcesContext& context,
     uint32_t width,
-    uint32_t height,
+    uint32_t height
+) {
+    if(
+        !context.logicalDevice ||
+        !context.physicalDevice ||
+        !context.surface ||
+        (width == 0) ||
+        (height == 0)
+    ) {
+        return false;
+    }
+
+    bool swapchainAttemptState = m_swapchain.build(
+        context.logicalDevice, context.physicalDevice,
+        context.surface, width, height, m_deletionQueue
+    );
+
+    if(!swapchainAttemptState || m_swapchain.imageViews.empty())
+    {
+        destroy(context);
+        return false;
+    }
+
+    return true;
+}
+
+bool RenderResources::build_splat_resources(
+    RenderResourcesContext& context,
     uint32_t framesInFlight,
     const SplatBuffer& splatBuffer,
     uint32_t entryCapacity
@@ -20,24 +64,11 @@ bool RenderResources::build(
 
     if(
         !splatBuffer.buffer.buffer ||
-        (width == 0) || 
-        (height == 0) || 
         (framesInFlight == 0) ||
         (entryCapacity == 0) ||
         (splatCapacity == 0) ||
         !render_resources_context_is_valid(context)
     ) {
-        return false;
-    }
-
-    bool swapchainAttemptState = m_swapchain.build(
-        context.logicalDevice, context.physicalDevice, 
-        context.surface, width, height, m_deletionQueue
-    );
-
-    if(!swapchainAttemptState || m_swapchain.imageViews.empty())
-    {
-        destroy(context);
         return false;
     }
 
@@ -217,6 +248,16 @@ vk::Extent2D RenderResources::extent() const
 vk::Image RenderResources::color_image(uint32_t imageIndex) const
 {
     return m_swapchain.images[imageIndex];
+}
+
+vk::ImageView RenderResources::color_image_view(uint32_t imageIndex) const
+{
+    return m_swapchain.imageViews[imageIndex];
+}
+    
+vk::Format RenderResources::color_format() const
+{
+    return m_swapchain.format.format;
 }
 
 uint32_t RenderResources::color_image_count() const

@@ -1,4 +1,21 @@
-﻿#include "renderer/RenderFeatures.hpp"
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#include "renderer/RenderFeatures.hpp"
 
 #include "assets/splats/PlySplatLoader.hpp"
 
@@ -10,8 +27,9 @@
 
 bool RenderFeatures::build(
     RenderFeaturesContext& context, 
-    const char* splatPath,
-    const char*& loadError
+    const std::filesystem::path& splatPath,
+    const char*& loadError,
+    const std::function<bool()>& progressCallback
 ) {
     loadError = nullptr;
     
@@ -20,12 +38,19 @@ bool RenderFeatures::build(
     if(!render_features_context_is_valid(context)) 
         return false;
 
-    PlySplatLoadResult loadResult = load_ply_splat_cloud(splatPath);
+    PlySplatLoadResult loadResult = load_ply_splat_cloud(splatPath, progressCallback);
     if(!loadResult.success)
     {
         loadError = loadResult.error;
-        logger->print(loadError);
+        if(loadError)
+            logger->print(loadError);
 
+        return false;
+    }
+
+    if(progressCallback && !progressCallback())
+    {
+        destroy(context);
         return false;
     }
 
@@ -36,6 +61,12 @@ bool RenderFeatures::build(
     );
 
     if(!m_splatBuffer.buffer.buffer || (m_splatBuffer.splatCount == 0))
+    {
+        destroy(context);
+        return false;
+    }
+
+    if(progressCallback && !progressCallback())
     {
         destroy(context);
         return false;
@@ -53,11 +84,23 @@ bool RenderFeatures::build(
         return false;
     }
 
+    if(progressCallback && !progressCallback())
+    {
+        destroy(context);
+        return false;
+    }
+
     DescriptorPoolBuilder descriptorPoolBuilder(context.logicalDevice);
     descriptorPoolBuilder.add_entry(vk::DescriptorType::eStorageBuffer, 1);
 
     m_descriptorPool = descriptorPoolBuilder.build(1, m_deletionQueue);
     if(!m_descriptorPool)
+    {
+        destroy(context);
+        return false;
+    }
+
+    if(progressCallback && !progressCallback())
     {
         destroy(context);
         return false;
@@ -75,6 +118,12 @@ bool RenderFeatures::build(
         return false;
     }
 
+    if(progressCallback && !progressCallback())
+    {
+        destroy(context);
+        return false;
+    }
+
     write_storage_buffer_descriptor(
         context.logicalDevice,
         m_sphericalHarmonicDescriptorSet,
@@ -82,6 +131,12 @@ bool RenderFeatures::build(
         0,
         m_sphericalHarmonicBuffer.buffer.size
     );
+
+    if(progressCallback && !progressCallback())
+    {
+        destroy(context);
+        return false;
+    }
 
     m_pipelines = build_render_feature_pipeline(
         context.logicalDevice,

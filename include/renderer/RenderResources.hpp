@@ -1,4 +1,21 @@
-﻿#pragma once
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#pragma once
 
 #ifndef RENDERER_RENDER_RESOURCES_H
 #define RENDERER_RENDER_RESOURCES_H
@@ -45,10 +62,14 @@ public:
     RenderResources(RenderResources&&) = delete;
     RenderResources& operator=(RenderResources&&) = delete;
     
-    bool build(
+    bool build_core_resources(
         RenderResourcesContext& context,
         uint32_t width,
-        uint32_t height,
+        uint32_t height
+    );
+
+    bool build_splat_resources(
+        RenderResourcesContext& context,
         uint32_t framesInFlight,
         const SplatBuffer& splatBuffer,
         uint32_t entryCapacity
@@ -60,7 +81,9 @@ public:
     vk::Extent2D extent() const;
 
     vk::Image color_image(uint32_t imageIndex) const;
-
+    vk::ImageView color_image_view(uint32_t imageIndex) const;
+    
+    vk::Format color_format() const;
     uint32_t color_image_count() const;
 
     vk::DescriptorSet swapchain_storage_descriptor_set(uint32_t imageIndex) const;

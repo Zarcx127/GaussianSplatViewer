@@ -1,35 +1,39 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "Launcher.hpp"
 
-#include <dwmapi.h>
 #include <shobjidl.h>
+
+#include "logging/Logger.hpp"
 
 namespace
 {
-    constexpr const char* WINDOW_CLASS_NAME = "GaussianSplatLauncherWindow";
-    constexpr const char* WINDOW_TITLE = "Gaussian Splat Launcher";
-
     constexpr int FILE_PATH_ID = 100;
     constexpr int SELECT_FILE_ID = 101;
     constexpr int OPEN_FILE_ID = 102;
 
     constexpr int CONTROL_MARGIN = 20;
     constexpr int CONTROL_HEIGHT = 24;
-    constexpr int LABEL_TO_PATH_GAP = 6;
-    constexpr int PATH_TO_BUTTON_GAP = 16;
+    constexpr int LABEL_TO_FILE_PATH_GAP = 6;
+    constexpr int FILE_PATH_TO_BUTTON_GAP = 16;
+    constexpr int FILE_PATH_WIDTH = 400;
     constexpr int BUTTON_WIDTH = 100;
     constexpr int BUTTON_GAP = 10;
-    constexpr int FILE_PATH_WIDTH = 400;
-    
-    constexpr int CLIENT_WIDTH = (
-        FILE_PATH_WIDTH + (CONTROL_MARGIN * 2)
-    );
-
-    constexpr int CLIENT_HEIGHT = (
-        (CONTROL_MARGIN * 2) +
-        (CONTROL_HEIGHT * 3) +
-        LABEL_TO_PATH_GAP +
-        PATH_TO_BUTTON_GAP
-    );
 
     constexpr COLORREF BACKGROUND_COLOR = RGB(45, 45, 48);
     constexpr COLORREF CAPTION_COLOR = RGB(38, 38, 42);
@@ -40,202 +44,176 @@ namespace
     constexpr COLORREF BORDER_COLOR = RGB(88, 88, 94);
     constexpr COLORREF TEXT_COLOR = RGB(235, 235, 235);
     constexpr COLORREF DISABLED_TEXT_COLOR = RGB(145, 145, 150);
-
-    constexpr DWORD WINDOW_STYLE = (
-        WS_OVERLAPPED |
-        WS_CAPTION |
-        WS_SYSMENU |
-        WS_MINIMIZEBOX
-    );
-
-    int scale_dimension(int value, UINT dpi);
 }
 
-Launcher::Launcher(std::string* selectedFilePath)
+Launcher::Launcher(WinBackend& backend, std::filesystem::path& selectedFilePath) 
 {
-    m_selectedFilePath = selectedFilePath;
+    m_backend = &backend;
+    m_selectedFilePath = &selectedFilePath;
+
+    m_window = m_backend->get_window();
+
+    m_backend->eraseBackgroundCallback =
+        [this] (HDC deviceContext)->bool {
+            return erase_background_callback(deviceContext);
+        };
+
+    m_backend->dpiChangedCallback = 
+        [this] (UINT dpi)->void {
+            dpi_changed_callback(dpi);
+        };
+
+    m_backend->controlColorCallback = 
+        [this] (HDC deviceContext, HWND control)->HBRUSH {
+            return control_color_callback(deviceContext, control);
+        };
+
+    m_backend->drawItemCallback = 
+        [this] (const DRAWITEMSTRUCT* drawInfo)->bool {
+            return draw_item_callback(drawInfo);
+        };
+
+    m_backend->commandCallback = 
+        [this] (int controlId, int notification)->bool {
+            return command_callback(controlId, notification);
+        };
+
+    m_backend->closeCallback = 
+        [this] ()->void {
+            m_result = LauncherResult::ExitApplication;
+        };
 }
 
 bool Launcher::build()
 {
-    if(!m_selectedFilePath)
+    Logger* logger = Logger::get_logger();
+
+    if(!m_window)
+    {
+        logger->print("Cannot create launcher without a Win32 window");
         return false;
+    }
 
     HRESULT result = CoInitializeEx(
         nullptr,
-        COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE
+        (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)
     );
 
     if(FAILED(result))
+    {
+        logger->print("Failed to initialize launcher COM");
         return false;
+    }
 
     m_comInitialized = true;
 
-    m_instance = GetModuleHandleA(nullptr);
-    if(!m_instance)
+    logger->print("Initialized launcher COM");
+
+    if(!create_brush(m_backgroundBrush, BACKGROUND_COLOR))
         return false;
 
-    m_backgroundBrush = CreateSolidBrush(BACKGROUND_COLOR);
-    m_controlBrush = CreateSolidBrush(CONTROL_COLOR);
-    m_buttonBrush = CreateSolidBrush(BUTTON_COLOR);
-    m_buttonPressedBrush = CreateSolidBrush(BUTTON_PRESSED_COLOR);
-    m_buttonDisabledBrush = CreateSolidBrush(BUTTON_DISABLED_COLOR);
-    m_borderBrush = CreateSolidBrush(BORDER_COLOR);
-
-    if(
-        !m_backgroundBrush ||
-        !m_controlBrush ||
-        !m_buttonBrush ||
-        !m_buttonPressedBrush ||
-        !m_buttonDisabledBrush ||
-        !m_borderBrush
-    ) {
-        return false;
-    }
-
-    WNDCLASSEXA windowClass = {};
-
-    windowClass.cbSize = sizeof(windowClass);
-    windowClass.style = (CS_HREDRAW | CS_VREDRAW);
-    windowClass.lpfnWndProc = Launcher::window_proc;
-    windowClass.hInstance = m_instance;
-    windowClass.hCursor = LoadCursorA(nullptr, IDC_ARROW);
-    windowClass.hbrBackground = m_backgroundBrush;
-    windowClass.lpszClassName = WINDOW_CLASS_NAME;
-
-    if(!RegisterClassExA(&windowClass))
+    if(!create_brush(m_controlBrush, CONTROL_COLOR))
         return false;
 
-    m_window = CreateWindowExA(
-        0,
-        WINDOW_CLASS_NAME,
-        WINDOW_TITLE,
-        WINDOW_STYLE,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        CLIENT_WIDTH, CLIENT_HEIGHT,
-        nullptr, nullptr,
-        m_instance,
-        this
-    );
-
-    if(!m_window)
+    if(!create_brush(m_buttonBrush, BUTTON_COLOR))
         return false;
 
-    const COLORREF captionColor = CAPTION_COLOR;
-    const COLORREF captionTextColor = TEXT_COLOR;
-    const COLORREF captionBorderColor = BORDER_COLOR;
+    if(!create_brush(m_buttonPressedBrush, BUTTON_PRESSED_COLOR))
+        return false;
 
-    (void) DwmSetWindowAttribute(
-        m_window, DWMWA_CAPTION_COLOR,
-        &captionColor, sizeof(captionColor)
-    );
+    if(!create_brush(m_buttonDisabledBrush, BUTTON_DISABLED_COLOR))
+        return false;
 
-    (void) DwmSetWindowAttribute(
-        m_window, DWMWA_TEXT_COLOR,
-        &captionTextColor, sizeof(captionTextColor)
-    );
+    if(!create_brush(m_borderBrush, BORDER_COLOR))
+        return false;
 
-    (void) DwmSetWindowAttribute(
-        m_window, DWMWA_BORDER_COLOR,
-        &captionBorderColor, sizeof(captionBorderColor)
-    );
-
-    m_dpi = GetDpiForWindow(m_window);
-
-    RECT windowRect = {
-        0,
-        0,
-        scale_dimension(CLIENT_WIDTH, m_dpi),
-        scale_dimension(CLIENT_HEIGHT, m_dpi)
-    };
-
-    if(!AdjustWindowRectExForDpi(
-        &windowRect,
-        WINDOW_STYLE,
-        FALSE,
-        0,
-        m_dpi
+    if(!m_backend->set_window_colors(
+        CAPTION_COLOR, TEXT_COLOR,
+        BORDER_COLOR
     )) {
+        logger->print("Failed to configure launcher window colors");
         return false;
     }
 
-    const int windowWidth = windowRect.right - windowRect.left;
-    const int windowHeight = windowRect.bottom - windowRect.top;
+    logger->print("Configured launcher window colors");
 
-    HMONITOR monitor = MonitorFromWindow(m_window, MONITOR_DEFAULTTOPRIMARY);
-
-    MONITORINFO monitorInfo = {};
-    monitorInfo.cbSize = sizeof(monitorInfo);
-
-    if(!GetMonitorInfoA(monitor, &monitorInfo))
-        return false;
-
-    const int workWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
-    const int workHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
-
-    const int windowX = monitorInfo.rcWork.left + ((workWidth - windowWidth) / 2);
-    const int windowY = monitorInfo.rcWork.top + ((workHeight - windowHeight) / 2);
-
-    SetWindowPos(
-        m_window, nullptr,
-        windowX, windowY,
-        windowWidth, windowHeight,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
+    m_dpi = m_backend->get_dpi();
 
     if(!build_controls())
+    {
+        logger->print("Failed to build launcher controls");
         return false;
+    }
 
-    ShowWindow(m_window, SW_SHOW);
-    UpdateWindow(m_window);
+    m_backend->show_window();
+
+    logger->print("Created launcher interface");
 
     return true;
 }
 
 LauncherResult Launcher::main_loop()
 {
-    m_result = {};
-
-    MSG message = {};
-    while(GetMessageA(&message, nullptr, 0, 0) > 0)
-    {
-        TranslateMessage(&message);
-        DispatchMessageA(&message);
-    }
-
+    m_result = LauncherResult::Running;
+    while(m_backend->wait_events());
+    
     return m_result;
 }
 
 bool Launcher::build_controls()
 {
-    HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    Logger* logger = Logger::get_logger();
+
+    HINSTANCE instance = reinterpret_cast<HINSTANCE>(
+        GetWindowLongPtrA(m_window, GWLP_HINSTANCE)
+    );
+
+    HFONT font = static_cast<HFONT>(
+        GetStockObject(DEFAULT_GUI_FONT)
+    );
+
+    const wchar_t* selectedFilePath = m_selectedFilePath->c_str();
 
     m_filePathLabel = CreateWindowExA(
         0, "STATIC", "Selected File:",
-        WS_CHILD | WS_VISIBLE,
-        0, 0, 0, 0,
-        m_window, nullptr, m_instance, nullptr
+        (WS_CHILD | WS_VISIBLE),
+        0, 0,
+        0, 0,
+        m_window, nullptr,
+        instance, nullptr
     );
 
-    m_filePathControl = CreateWindowExA(
-        0, "EDIT", m_selectedFilePath->c_str(),
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_READONLY | ES_MULTILINE,
-        0, 0, 0, 0,
-        m_window, reinterpret_cast<HMENU>(FILE_PATH_ID), m_instance, nullptr
+    m_filePathControl = CreateWindowExW(
+        0, L"EDIT", selectedFilePath,
+        (
+            WS_CHILD |
+            WS_VISIBLE |
+            ES_AUTOHSCROLL |
+            ES_READONLY |
+            ES_MULTILINE
+        ),
+        0, 0,
+        0, 0,
+        m_window, reinterpret_cast<HMENU>(FILE_PATH_ID),
+        instance, nullptr
     );
 
     m_selectFileButton = CreateWindowExA(
-        0, "BUTTON", "Select File",
-        WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-        0, 0, 0, 0,
-        m_window, reinterpret_cast<HMENU>(SELECT_FILE_ID), m_instance, nullptr
+        0, "BUTTON", "Select .ply file",
+        (WS_CHILD | WS_VISIBLE | BS_OWNERDRAW),
+        0, 0,
+        0, 0,
+        m_window, reinterpret_cast<HMENU>(SELECT_FILE_ID),
+        instance, nullptr
     );
 
     m_openFileButton = CreateWindowExA(
         0, "BUTTON", "Open",
-        WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-        0, 0, 0, 0,
-        m_window, reinterpret_cast<HMENU>(OPEN_FILE_ID), m_instance, nullptr
+        (WS_CHILD | WS_VISIBLE | BS_OWNERDRAW),
+        0, 0,
+        0, 0,
+        m_window, reinterpret_cast<HMENU>(OPEN_FILE_ID),
+        instance, nullptr
     );
 
     if(
@@ -244,17 +222,35 @@ bool Launcher::build_controls()
         !m_selectFileButton ||
         !m_openFileButton
     ) {
+        logger->print("Failed to create launcher controls");
         return false;
     }
-    
-    SendMessageA(m_filePathLabel, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    SendMessageA(m_filePathControl, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    SendMessageA(m_selectFileButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    SendMessageA(m_openFileButton, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+
+    SendMessageA(
+        m_filePathLabel, WM_SETFONT,
+        reinterpret_cast<WPARAM>(font), TRUE
+    );
+
+    SendMessageA(
+        m_filePathControl, WM_SETFONT,
+        reinterpret_cast<WPARAM>(font), TRUE
+    );
+
+    SendMessageA(
+        m_selectFileButton, WM_SETFONT,
+        reinterpret_cast<WPARAM>(font), TRUE
+    );
+
+    SendMessageA(
+        m_openFileButton, WM_SETFONT,
+        reinterpret_cast<WPARAM>(font), TRUE
+    );
 
     EnableWindow(m_openFileButton, !m_selectedFilePath->empty());
 
     layout_controls();
+
+    logger->print("Created launcher controls");
 
     return true;
 }
@@ -264,8 +260,7 @@ bool Launcher::select_file()
     IFileOpenDialog* fileDialog = nullptr;
 
     HRESULT result = CoCreateInstance(
-        CLSID_FileOpenDialog,
-        nullptr,
+        CLSID_FileOpenDialog, nullptr,
         CLSCTX_INPROC_SERVER,
         IID_PPV_ARGS(&fileDialog)
     );
@@ -278,7 +273,10 @@ bool Launcher::select_file()
         { L"All Files (*.*)", L"*.*" }
     };
 
-    result = fileDialog->SetFileTypes(ARRAYSIZE(fileTypes), fileTypes);
+    result = fileDialog->SetFileTypes(
+        ARRAYSIZE(fileTypes),
+        fileTypes
+    );
 
     FILEOPENDIALOGOPTIONS options = {};
     if(SUCCEEDED(result))
@@ -312,7 +310,7 @@ bool Launcher::select_file()
             m_window,
             "Failed to open the file selection dialog.",
             "File Selection Error",
-            MB_OK | MB_ICONERROR
+            (MB_OK | MB_ICONERROR)
         );
 
         return false;
@@ -338,46 +336,15 @@ bool Launcher::select_file()
     if(FAILED(result) || !wideFilePath)
         return false;
 
-    int filePathLength = WideCharToMultiByte(
-        CP_ACP,
-        0,
-        wideFilePath,
-        -1,
-        nullptr,
-        0,
-        nullptr,
-        nullptr
-    );
-
-    if(filePathLength <= 0)
-    {
-        CoTaskMemFree(wideFilePath);
-        return false;
-    }
-
-    std::string filePath(filePathLength, '\0');
-
-    int convertedLength = WideCharToMultiByte(
-        CP_ACP,
-        0,
-        wideFilePath,
-        -1,
-        filePath.data(),
-        filePathLength,
-        nullptr,
-        nullptr
-    );
+    *m_selectedFilePath = std::filesystem::path(wideFilePath);
 
     CoTaskMemFree(wideFilePath);
 
-    if(convertedLength <= 0)
-        return false;
+    SetWindowTextW(
+        m_filePathControl,
+        m_selectedFilePath->c_str()
+    );
 
-    filePath.resize(convertedLength - 1);
-
-    *m_selectedFilePath = filePath;
-
-    SetWindowTextA(m_filePathControl, m_selectedFilePath->c_str());
     EnableWindow(m_openFileButton, TRUE);
 
     return true;
@@ -385,36 +352,33 @@ bool Launcher::select_file()
 
 void Launcher::layout_controls()
 {
-    const int margin = scale_dimension(CONTROL_MARGIN, m_dpi);
-    const int controlHeight = scale_dimension(CONTROL_HEIGHT, m_dpi);
-    const int labelToPathGap = scale_dimension(LABEL_TO_PATH_GAP, m_dpi);
-    const int pathToButtonGap = scale_dimension(PATH_TO_BUTTON_GAP, m_dpi);
-    const int buttonWidth = scale_dimension(BUTTON_WIDTH, m_dpi);
-    const int buttonGap = scale_dimension(BUTTON_GAP, m_dpi);
-    const int filePathWidth = scale_dimension(FILE_PATH_WIDTH, m_dpi);
+    int controlMargin = scale_dimension(CONTROL_MARGIN, m_dpi);
+    int controlHeight = scale_dimension(CONTROL_HEIGHT, m_dpi);
 
-    const int filePathY =
-        margin + controlHeight + labelToPathGap;
+    int labelToFilePathGap = scale_dimension(LABEL_TO_FILE_PATH_GAP, m_dpi);
+    int filePathToButtonGap = scale_dimension(FILE_PATH_TO_BUTTON_GAP, m_dpi);
 
-    const int buttonY =
-        filePathY + controlHeight + pathToButtonGap;
+    int filePathWidth = scale_dimension(FILE_PATH_WIDTH, m_dpi);
+    int buttonWidth = scale_dimension(BUTTON_WIDTH, m_dpi);
+    int buttonHeight = controlHeight;
+    int buttonGap = scale_dimension(BUTTON_GAP, m_dpi);
 
-    const int openButtonX =
-        margin + filePathWidth - buttonWidth;
+    int filePathY = (controlMargin + controlHeight + labelToFilePathGap);
+    int buttonY = (filePathY + controlHeight + filePathToButtonGap);
 
-    const int selectFileButtonX =
-        openButtonX - buttonGap - buttonWidth;
+    int openFileButtonX = (controlMargin + filePathWidth - buttonWidth);
+    int selectFileButtonX = (openFileButtonX - buttonGap - buttonWidth);
 
     MoveWindow(
         m_filePathLabel,
-        margin, margin,
+        controlMargin, controlMargin,
         filePathWidth, controlHeight,
         TRUE
     );
 
     MoveWindow(
         m_filePathControl,
-        margin, filePathY,
+        controlMargin, filePathY,
         filePathWidth, controlHeight,
         TRUE
     );
@@ -424,14 +388,14 @@ void Launcher::layout_controls()
     MoveWindow(
         m_selectFileButton,
         selectFileButtonX, buttonY,
-        buttonWidth, controlHeight,
+        buttonWidth, buttonHeight,
         TRUE
     );
 
     MoveWindow(
         m_openFileButton,
-        openButtonX, buttonY,
-        buttonWidth, controlHeight,
+        openFileButtonX, buttonY,
+        buttonWidth, buttonHeight,
         TRUE
     );
 }
@@ -457,224 +421,205 @@ void Launcher::layout_file_path_text()
     SelectObject(deviceContext, oldFont);
     ReleaseDC(m_filePathControl, deviceContext);
 
-    const int textHeight = textMetrics.tmHeight;
-    const int verticalMargin = (controlRect.bottom - textHeight) / 2;
+    int textHeight = textMetrics.tmHeight;
+    int horizontalMargin = scale_dimension(6, m_dpi);
+    int verticalMargin = ((controlRect.bottom - textHeight) / 2);
 
     RECT textRect = {
-        scale_dimension(6, m_dpi),
+        horizontalMargin,
         verticalMargin,
-        controlRect.right - scale_dimension(6, m_dpi),
-        verticalMargin + textHeight
+        (controlRect.right - horizontalMargin),
+        (verticalMargin + textHeight)
     };
 
     SendMessageA(
-        m_filePathControl,
-        EM_SETRECT,
-        0,
-        reinterpret_cast<LPARAM>(&textRect)
+        m_filePathControl, EM_SETRECT,
+        0, reinterpret_cast<LPARAM>(&textRect)
     );
 }
 
 void Launcher::draw_button(const DRAWITEMSTRUCT* drawInfo)
 {
-    HBRUSH backgroundBrush = m_buttonBrush;
-    COLORREF textColor = TEXT_COLOR;
+    HBRUSH buttonBrush = m_buttonBrush;
+    COLORREF buttonTextColor = TEXT_COLOR;
 
-    if(drawInfo->itemState & ODS_DISABLED)
+    if((drawInfo->itemState & ODS_DISABLED) != 0)
     {
-        backgroundBrush = m_buttonDisabledBrush;
-        textColor = DISABLED_TEXT_COLOR;
+        buttonBrush = m_buttonDisabledBrush;
+        buttonTextColor = DISABLED_TEXT_COLOR;
     }
-    else if(drawInfo->itemState & ODS_SELECTED)
+    else if((drawInfo->itemState & ODS_SELECTED) != 0)
     {
-        backgroundBrush = m_buttonPressedBrush;
+        buttonBrush = m_buttonPressedBrush;
     }
 
-    FillRect(drawInfo->hDC, &drawInfo->rcItem, backgroundBrush);
+    FillRect(drawInfo->hDC, &drawInfo->rcItem, buttonBrush);
     FrameRect(drawInfo->hDC, &drawInfo->rcItem, m_borderBrush);
 
-    char text[64] = {};
-    GetWindowTextA(drawInfo->hwndItem, text, sizeof(text));
+    char buttonText[64] = {};
 
-    RECT textRect = drawInfo->rcItem;
+    GetWindowTextA(
+        drawInfo->hwndItem,
+        buttonText, sizeof(buttonText)
+    );
 
-    if(drawInfo->itemState & ODS_SELECTED)
-        OffsetRect(&textRect, 1, 1);
+    RECT buttonTextRect = drawInfo->rcItem;
+    if((drawInfo->itemState & ODS_SELECTED) != 0)
+        OffsetRect(&buttonTextRect, 1, 1);
 
     SetBkMode(drawInfo->hDC, TRANSPARENT);
-    SetTextColor(drawInfo->hDC, textColor);
+    SetTextColor(drawInfo->hDC, buttonTextColor);
 
     DrawTextA(
-        drawInfo->hDC, text, -1, &textRect,
-        DT_CENTER | DT_VCENTER | DT_SINGLELINE
+        drawInfo->hDC,
+        buttonText, -1,
+        &buttonTextRect,
+        (DT_CENTER | DT_VCENTER | DT_SINGLELINE)
     );
 }
 
-LRESULT CALLBACK Launcher::window_proc(
-    HWND window, 
-    UINT message, 
-    WPARAM wParam, 
-    LPARAM lParam
+void Launcher::dpi_changed_callback(UINT dpi)
+{
+    m_dpi = dpi;
+
+    if(m_filePathLabel)
+        layout_controls();
+}
+
+bool Launcher::erase_background_callback(HDC deviceContext)
+{
+    RECT clientRect {};
+
+    if(!GetClientRect(m_window, &clientRect))
+        return false;
+
+    return (
+        FillRect(
+            deviceContext,
+            &clientRect,
+            m_backgroundBrush
+        ) != 0
+    );
+}
+
+HBRUSH Launcher::control_color_callback(
+    HDC deviceContext,
+    HWND control
 ) {
-    Launcher* launcher = reinterpret_cast<Launcher*>(
-        GetWindowLongPtrA(window, GWLP_USERDATA)
+    SetTextColor(deviceContext, TEXT_COLOR);
+
+    if(control == m_filePathControl)
+    {
+        SetBkColor(deviceContext, CONTROL_COLOR);
+        return m_controlBrush;
+    }
+
+    SetBkMode(deviceContext, TRANSPARENT);
+
+    return m_backgroundBrush;
+}
+
+bool Launcher::draw_item_callback(const DRAWITEMSTRUCT* drawInfo)
+{
+    if(!drawInfo)
+        return false;
+
+    if(
+        (drawInfo->CtlID != SELECT_FILE_ID) &&
+        (drawInfo->CtlID != OPEN_FILE_ID)
+    ) {
+        return false;
+    }
+
+    draw_button(drawInfo);
+
+    return true;
+}
+
+bool Launcher::command_callback(int controlId, int notification)
+{
+    if(notification != BN_CLICKED)
+        return false;
+
+    if(controlId == SELECT_FILE_ID)
+    {
+        (void) select_file();
+        return true;
+    }
+
+    if(controlId == OPEN_FILE_ID)
+    {
+        if(m_selectedFilePath->empty())
+            return true;
+
+        m_result = LauncherResult::OpenViewer;
+        m_backend->close_window();
+
+        return true;
+    }
+
+    return false;
+}
+
+bool Launcher::create_brush(HBRUSH& brush, COLORREF color)
+{
+    Logger* logger = Logger::get_logger();
+
+    brush = CreateSolidBrush(color);
+    if(!brush)
+    {
+        logger->print("Failed to create launcher brush");
+        return false;
+    }
+
+    logger->print("Created launcher brush");
+
+    m_brushDeletionQueue.push_back(
+        [logger, &brush] ()->void {
+            DeleteObject(brush);
+            brush = nullptr;
+
+            logger->print("Deleted launcher brush");
+        }
     );
 
-    if(message == WM_NCCREATE)
-    {
-        CREATESTRUCTA* createInfo = reinterpret_cast<CREATESTRUCTA*>(lParam);
+    return true;
+}
 
-        launcher = reinterpret_cast<Launcher*>(createInfo->lpCreateParams);
-
-        SetWindowLongPtrA(
-            window,
-            GWLP_USERDATA,
-            reinterpret_cast<LONG_PTR>(launcher)
-        );
-
-        if(launcher)
-            launcher->m_window = window;
-    }
-
-    if((message == WM_DPICHANGED) && launcher)
-    {
-        launcher->m_dpi = HIWORD(wParam);
-
-        RECT* suggestedRect = reinterpret_cast<RECT*>(lParam);
-
-        SetWindowPos(
-            window,
-            nullptr,
-            suggestedRect->left,
-            suggestedRect->top,
-            suggestedRect->right - suggestedRect->left,
-            suggestedRect->bottom - suggestedRect->top,
-            SWP_NOZORDER | SWP_NOACTIVATE
-        );
-
-        launcher->layout_controls();
-
-        return 0;
-    }
-
-    if((message == WM_CTLCOLORSTATIC) && launcher)
-    {
-        HDC deviceContext = reinterpret_cast<HDC>(wParam);
-        HWND control = reinterpret_cast<HWND>(lParam);
-
-        SetTextColor(deviceContext, TEXT_COLOR);
-
-        if(control == launcher->m_filePathControl)
-        {
-            SetBkColor(deviceContext, CONTROL_COLOR);
-            return reinterpret_cast<LRESULT>(launcher->m_controlBrush);
-        }
-
-        SetBkMode(deviceContext, TRANSPARENT);
-        return reinterpret_cast<LRESULT>(launcher->m_backgroundBrush);
-    }
-
-    if((message == WM_DRAWITEM) && launcher)
-    {
-        DRAWITEMSTRUCT* drawInfo = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
-
-        if(
-            (drawInfo->CtlID == SELECT_FILE_ID) ||
-            (drawInfo->CtlID == OPEN_FILE_ID)
-        ) {
-            launcher->draw_button(drawInfo);
-            return TRUE;
-        }
-    }
-
-    if((message == WM_COMMAND) && launcher)
-    {
-        const int controlId = LOWORD(wParam);
-        const int notification = HIWORD(wParam);
-
-        if(notification == BN_CLICKED)
-        {
-            if(controlId == SELECT_FILE_ID)
-            {
-                (void) launcher->select_file();
-                return 0;
-            }
-
-            if(controlId == OPEN_FILE_ID)
-            {
-                if(launcher->m_selectedFilePath->empty())
-                    return 0;
-
-                launcher->m_result.action = LauncherAction::OpenViewer;
-                launcher->m_result.filePath = launcher->m_selectedFilePath->c_str();
-
-                DestroyWindow(window);
-
-                return 0;
-            }
-        }
-    }
-
-    if(message == WM_CLOSE)
-    {
-        DestroyWindow(window);
-        return 0;
-    }
-
-
-    if(message == WM_DESTROY)
-    {
-        if(launcher)
-            launcher->m_window = nullptr;
-
-        PostQuitMessage(0);
-        return 0;
-    }
-
-    return DefWindowProcA(window, message, wParam, lParam);
+int Launcher::scale_dimension(int value, UINT dpi)
+{
+    return MulDiv(value, dpi, USER_DEFAULT_SCREEN_DPI);
 }
 
 Launcher::~Launcher()
 {
-    if(m_backgroundBrush) DeleteObject(m_backgroundBrush);
-    if(m_controlBrush) DeleteObject(m_controlBrush);
-    if(m_buttonBrush) DeleteObject(m_buttonBrush);
-    if(m_buttonPressedBrush) DeleteObject(m_buttonPressedBrush);
-    if(m_buttonDisabledBrush) DeleteObject(m_buttonDisabledBrush);
-    if(m_borderBrush) DeleteObject(m_borderBrush);
-
-    if(m_window) 
-        DestroyWindow(m_window);
+    Logger* logger = Logger::get_logger();
     
-    if(m_comInitialized) 
+    m_backend->clear_callbacks();
+
+    while(!m_brushDeletionQueue.empty())
+    {
+        (m_brushDeletionQueue.back())();
+        m_brushDeletionQueue.pop_back();
+    }
+
+    if(m_comInitialized)
+    {
         CoUninitialize();
-    
-    if(m_instance) 
-        UnregisterClassA(WINDOW_CLASS_NAME, m_instance);
+        logger->print("Uninitialized launcher COM");
+    }
 
-    m_instance = nullptr;
-
+    m_backend = nullptr;
     m_window = nullptr;
+
     m_filePathLabel = nullptr;
     m_filePathControl = nullptr;
     m_selectFileButton = nullptr;
     m_openFileButton = nullptr;
 
-    m_backgroundBrush = nullptr;
-    m_controlBrush = nullptr;
-    m_buttonBrush = nullptr;
-    m_buttonPressedBrush = nullptr;
-    m_buttonDisabledBrush = nullptr;
-    m_borderBrush = nullptr;
-
     m_comInitialized = false;
     m_selectedFilePath = nullptr;
+
+    logger->print("Deleted launcher interface");
 }
 
-namespace 
-{
-    int scale_dimension(int value, UINT dpi)
-    {
-        return MulDiv(value, dpi, USER_DEFAULT_SCREEN_DPI);
-    }
-}

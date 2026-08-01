@@ -2,7 +2,7 @@
     "configurations": [
         {
             "name": "Win-32",
-            "compilerPath": "g++",
+            "compilerPath": "${workspaceFolder}/.toolchain/ucrt64/bin/g++.exe",
             "intelliSenseMode": "gcc-x64",
             "includePath": [
                 "${workspaceFolder}/include",
@@ -15,7 +15,7 @@
                 "GLFW_INCLUDE_NONE",
                 "WIN32_LEAN_AND_MEAN",
                 "_WIN32_WINNT=0x0A00",
-                "DWINVER=0x0A00"
+                "WINVER=0x0A00"
             ],
             "cStandard": "c17",
             "cppStandard": "c++17"

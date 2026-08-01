@@ -1,9 +1,28 @@
-﻿#include "factory/SplatFrameFactory.hpp"
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#include "factory/SplatFrameFactory.hpp"
 
 #include <limits>
 #include <algorithm>
 
 #include <vulkan/vulkan.hpp>
+
+#include "backend/Utils.hpp"
 
 namespace
 {
@@ -28,7 +47,6 @@ namespace
         SplatFrameResources& resources
     );
 
-    uint32_t divide_round_up(uint32_t value, uint32_t divisor);
     uint32_t calculate_scan_block_capacity(uint32_t valueCapacity);
 }
 
@@ -58,11 +76,11 @@ SplatFrameResources build_splat_frame_resources(
         SPLAT_ENTRY_SCAN_LOCAL_SIZE
     );
 
-    resources.sort.workgroupCapacity = divide_round_up(
+    resources.sort.workgroupCapacity = utils::divide_round_up(
         entryCapacity, SPLAT_SORT_LOCAL_SIZE
     );
 
-    resources.sort.histogramBlockCapacity = divide_round_up(
+    resources.sort.histogramBlockCapacity = utils::divide_round_up(
         resources.sort.workgroupCapacity, SPLAT_SORT_SCAN_LOCAL_SIZE
     );
 
@@ -411,20 +429,9 @@ namespace
         resources = {};
     }
 
-    uint32_t divide_round_up(uint32_t value, uint32_t divisor)
-    {
-        if(divisor == 0)
-            return 0;
-
-        return (
-            (value / divisor) +
-            static_cast<uint32_t>((value % divisor) != 0)
-        );
-    }
-
     uint32_t calculate_scan_block_capacity(uint32_t valueCapacity)
     {
-        uint32_t levelCapacity = divide_round_up(
+        uint32_t levelCapacity = utils::divide_round_up(
             valueCapacity, SPLAT_SORT_SCAN_LOCAL_SIZE
         );
 
@@ -439,7 +446,7 @@ namespace
             if(levelCapacity <= SPLAT_SORT_SCAN_LOCAL_SIZE)
                 break;
 
-            levelCapacity = divide_round_up(
+            levelCapacity = utils::divide_round_up(
                 levelCapacity, SPLAT_SORT_SCAN_LOCAL_SIZE
             );
         }

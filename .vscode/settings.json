@@ -1,5 +1,4 @@
 {
-    "editor.colorDecorators": false,
     "files.associations": {
         "*.cpp": "cpp",
         "iostream": "cpp",
@@ -102,13 +101,14 @@
     "C_Cpp.codeAnalysis.clangTidy.enabled": false,
 
     "C_Cpp.intelliSenseCacheSize": 0,
-    "C_Cpp.intelliSenseMemoryLimit": 8192,
+    "C_Cpp.intelliSenseMemoryLimit": 8192, // FLAG
     "C_Cpp.workspaceParsingPriority": "high",
 
     "shader-validator.includes": [
         "${workspaceFolder}/shaders/include"
     ],
 
+    "editor.colorDecorators": false,
     "editor.inlayHints.enabled": "off",
     
     "search.useParentIgnoreFiles": false,
@@ -116,7 +116,9 @@
     "search.exclude": {
         "obj/**": true,
         "gpu/**": true,
-        "assets/**": true
+        "assets/**": true,
+        "include/generated/**": true,
+        ".toolchain/**": true,
     },
 
     "explorer.compactFolders": false,
@@ -125,4 +127,14 @@
     "explorer.fileNesting.patterns": {
         "Makefile": ".lastMode"
     },
+
+    "files.readonlyInclude": {
+        "LICENSE": true,
+    },
+
+    "terminal.integrated.env.windows": {
+        "PATH": "${workspaceFolder}\\.toolchain\\ucrt64\\bin;${workspaceFolder}\\.toolchain\\vulkan\\bin;${env:PATH}",
+        "VULKAN_SDK": "${workspaceFolder}\\.toolchain\\vulkan",
+        "VK_ADD_LAYER_PATH": "${workspaceFolder}\\.toolchain\\vulkan\\bin"
+    }
 }

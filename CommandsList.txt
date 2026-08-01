@@ -1,28 +1,30 @@
 // Make Commands
-
+//
 // "make" defaults to "make reload"
-
+//
 // [mode] = debug/release
 // by default [mode] = debug
-
-make build mode=[mode]
-	rebuilds objs, shaders and executable
+//
+// 	in release mode shaders are baked into executable
+//
 
 make reload mode=[mode]
-    run .exe after rebuilding objs,
-	shaders and executable
+    run .exe after rebuilding objs, shaders and executable
 
 make clean_run mode=[mode]
-    run .exe after rebuilding objs, 
-	shaders and executable
-	both shaders and obj are recompiled
+	deletes all shaders and obj for [mode]
+    run .exe after rebuilding objs, shaders and executable
+
+make build mode=[mode]
+	builds objs, shaders and executable
 
 make run
-	clears console and runs output
+	clears console and runs executable
 
 make release
-	creates a zip that contains the full
-	release package
+	cleans up all release resources 
+	builds release objs, shaders and executable
+	creates a zip that contains the release executable
 
 make clean
     deletes all spv and obj files
@@ -39,6 +41,7 @@ make delete_exe
 	deletes the main executable
 
 make create [option] [path_to_file]/[file_name]
+	*DO NOT INCLUDE FILE EXTENSION
     creates in /(source/include)/[path_to_file] either:
 		1. [file_name].hpp
 		2. [file_name].cpp
@@ -57,11 +60,11 @@ make create [option] [path_to_file]/[file_name]
 		 /source/tmp/Example.cpp will be created
 
 make delete [option] [path_to_file]/[file_name]
+	*DO NOT INCLUDE FILE EXTENSION
     deletes from /(source/include)/[path_to_file] either:
 		1. [file_name].hpp
 		2. [file_name].cpp
 		3. both a [file_name].hpp and [file_name].cpp
-
 
 	the respective options are:
 		1. header
@@ -76,15 +79,19 @@ make delete [option] [path_to_file]/[file_name]
 		 /source/tmp/Example.cpp will be deleted
 
 make create_shader [option] [path_to_file]/[file_name].[file_type]
-    [option]=source 
-	creates [file_name].[file_type] in 
-	/shader/[path_to_file]
-	*[path_to_file] must not contain "include"
-	
-	[option]=header
-	creates [file_name].[file_type] in
-	/shader/include/[path_to_file]
+	the respective options are:
+		1. header
+		2. source
 
-make delete_header [path_to_file]/[file_name]
+	[option]=header
+		creates [file_name].[file_type] in
+		/shader/include/[path_to_file]
+
+    [option]=source 
+		creates [file_name].[file_type] in 
+		/shader/[path_to_file]
+		*[path_to_file] must not contain "include"
+
+make delete_header [path_to_file]/[file_name].[file_type]
 	deletes [file_name].[file_type] in 
 	/shader/[path_to_file]

@@ -1,3 +1,20 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "renderer/Renderer.hpp"
 
 #include <chrono>
@@ -5,6 +22,8 @@
 #include <algorithm>
 
 #include <glm/glm.hpp>
+
+#include "logging/Logger.hpp"
 
 #include "factory/SplatFrameFactory.hpp"
 
@@ -19,21 +38,21 @@
 
 namespace
 {
-    constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+    constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3U;
+    constexpr uint32_t SHARED_PUSH_CONSTANT_SIZE = 16U;
+
     constexpr std::chrono::milliseconds RESIZE_DEBOUNCE_TIME = 
         std::chrono::milliseconds(50);
 }
 
-Engine::Engine(GLFWwindow* window, const char* splatPath)
+Engine::Engine(GLFWwindow* window, const std::filesystem::path& splatPath)
 {
-    m_logger = Logger::get_logger();
-
     m_window = window;
     m_splatPath = splatPath;
 }
 
 void Engine::render_loop(
-    AppState& state, 
+    ViewerState& state, 
     const std::function<InputState()>& getInput
 ) {
     state.renderStatus.store(RenderStatus::Initializing, std::memory_order_release);
@@ -62,14 +81,22 @@ void Engine::render_loop(
         return;
     }
 
-    if(!init(initialWidth, initialHeight))
+    if(!init(initialWidth, initialHeight, state))
     {
-        state.renderStatus.store(RenderStatus::InitFailed, std::memory_order_release);
+        if(state.quitRequested.load(std::memory_order_acquire))
+        {
+            state.renderStatus.store(RenderStatus::Stopped, std::memory_order_release);
+            return;
+        }
+
+        state.renderStatus.store( RenderStatus::InitFailed, std::memory_order_release);
         state.quitRequested.store(true, std::memory_order_release);
 
         glfwPostEmptyEvent();
         return;
     }
+
+    m_loadingScreen.destroy();
 
     state.renderStatus.store(RenderStatus::Running, std::memory_order_release);
     
@@ -156,8 +183,9 @@ const char* Engine::load_error() const
     return m_loadError;
 }
 
-bool Engine::init(uint32_t width, uint32_t height)
+bool Engine::init(uint32_t width, uint32_t height, ViewerState& state)
 {
+    Logger* logger = Logger::get_logger();
     m_initialized = true;
 
     bool vulkanContextBuildSuccessful = 
@@ -223,11 +251,14 @@ bool Engine::init(uint32_t width, uint32_t height)
 
     m_renderInterface.add_push_constant_range(
         vk::ShaderStageFlagBits::eCompute,
-        0U, 
-        (
-            sizeof(FramePushConstant) +
-            sizeof(SplatSortPushConstant)
-        )
+        0U,
+        (sizeof(FramePushConstant) + SHARED_PUSH_CONSTANT_SIZE)
+    );
+
+    m_renderInterface.add_push_constant_range(
+        vk::ShaderStageFlagBits::eFragment,
+        sizeof(FramePushConstant),
+        SHARED_PUSH_CONSTANT_SIZE
     );
 
     PipelineLayoutBuilder pipelineLayoutBuilder(m_vulkanContext.logical_device_ref());
@@ -239,13 +270,35 @@ bool Engine::init(uint32_t width, uint32_t height)
         return false;
     }
 
-    if(!init_render_features())
+    if(!init_core_render_resources(width, height))
     {
         shutdown();
-        return false;    
+        return false;
     }
 
-    if(!init_render_resources(width, height))
+    if(!m_loadingScreen.build(
+        m_vulkanContext,
+        m_renderResources,
+        m_pipelineLayout
+    )) {
+        shutdown();
+        return false;
+    }
+
+    if(!m_loadingScreen.draw(
+        static_cast<float>(glfwGetTime())
+    )) {
+        shutdown();
+        return false;
+    }
+
+    if(!init_render_features(state))
+    {
+        shutdown();
+        return false;
+    }
+
+    if(!init_splat_render_resources())
     {
         shutdown();
         return false;
@@ -256,17 +309,22 @@ bool Engine::init(uint32_t width, uint32_t height)
     m_lastFrameTime = m_currentTime;
     m_numFrames = 0;
 
-    m_logger->print("Graphics engine started");
+    logger->print("Graphics engine started");
     
     return true;
 }
 
 Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputState& input)
 {
+    Logger* logger = Logger::get_logger();
+
     if(m_rebuildSwapchain)
     {
         destroy_render_resources();
-        if(!init_render_resources(width, height))
+        if(!init_core_render_resources(width, height))
+            return DrawResult::Skipped;
+
+        if(!init_splat_render_resources())
             return DrawResult::Skipped;
 
         m_currFrame = 0;
@@ -275,7 +333,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     if(m_currFrame >= m_renderResources.frame_count())
     {
-        m_logger->print("Invalid current frame index");
+        logger->print("Invalid current frame index");
         return DrawResult::FatalError;
     }
 
@@ -290,7 +348,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
             vk::False, UINT64_MAX
         ) != vk::Result::eSuccess
     ) {
-        m_logger->print("Failed to wait for current frame fence");
+        logger->print("Failed to wait for current frame fence");
         return DrawResult::FatalError;
     }
 
@@ -303,7 +361,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     if(!readSplatCountersSuccess)
     {
-        m_logger->print("Failed to read splat counters");
+        logger->print("Failed to read splat counters");
         return DrawResult::FatalError;
     }
 
@@ -317,16 +375,19 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
         if(grownCapacity <= frame.splatResources.entryCapacity) 
         {
-            m_logger->print("Splat entry capacity cannot grow further");
+            logger->print("Splat entry capacity cannot grow further");
             return DrawResult::FatalError;
         }
 
-        m_logger->print("Growing splat entry capacity");
+        logger->print("Growing splat entry capacity");
 
         m_splatEntryCapacity = grownCapacity;
 
         destroy_render_resources();
-        if(!init_render_resources(width, height))
+        if(!init_core_render_resources(width, height))
+            return DrawResult::FatalError;
+
+        if(!init_splat_render_resources())
             return DrawResult::FatalError;
 
         m_currFrame = 0;
@@ -356,7 +417,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
     }
     else if(acquireResult != VK_SUCCESS)
     {
-        m_logger->print("Failed to acquire swapchain image");
+        logger->print("Failed to acquire swapchain image");
         return DrawResult::FatalError;
     }
 
@@ -402,7 +463,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
         (imageIndex >= m_renderResources.image_in_flight_count()) ||
         (imageIndex >= m_renderResources.swapchain_storage_descriptor_set_count())
     ) {
-        m_logger->print("Invalid acquired swapchain image index");
+        logger->print("Invalid acquired swapchain image index");
         return DrawResult::FatalError;
     }
 
@@ -415,7 +476,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
                 vk::True, UINT64_MAX
             ) != vk::Result::eSuccess
         ) {
-            m_logger->print("Failed to wait for swapchain image fence");
+            logger->print("Failed to wait for swapchain image fence");
             return DrawResult::FatalError;
         }
     }
@@ -423,7 +484,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
     imageInFlight = frame.renderFinishedFence;
     if(device.resetFences(frame.renderFinishedFence) != vk::Result::eSuccess)
     {
-        m_logger->print("Failed to reset current frame fence");
+        logger->print("Failed to reset current frame fence");
         return DrawResult::FatalError;
     }
     
@@ -459,7 +520,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     if(graphicsQueue.submit(submitInfo, frame.renderFinishedFence) != vk::Result::eSuccess)
     {
-        m_logger->print("Failed to submit frame command buffer");
+        logger->print("Failed to submit frame command buffer");
         return DrawResult::FatalError;
     }
 
@@ -494,7 +555,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
 
     if(presentResult != VK_SUCCESS)
     {
-        m_logger->print("Failed to present swapchain image");
+        logger->print("Failed to present swapchain image");
         return DrawResult::FatalError;
     }
 
@@ -503,7 +564,7 @@ Engine::DrawResult Engine::draw(uint32_t width, uint32_t height, const InputStat
     return DrawResult::Success;
 }
 
-void Engine::update_timing(AppState& state)
+void Engine::update_timing(ViewerState& state)
 {
     m_numFrames++;
 
@@ -521,15 +582,37 @@ void Engine::update_timing(AppState& state)
     }
 }
 
-bool Engine::init_render_features()
+bool Engine::init_render_features(ViewerState& state)
 {    
-    if(!m_splatPath)
+    if(m_splatPath.empty())
         return false;
 
+    double lastLoadingFrameTime = glfwGetTime();
+
     RenderFeaturesContext context = make_render_features_context();
-    
+
     m_loadError = nullptr;
-    return m_renderFeatures.build(context, m_splatPath, m_loadError);
+
+    return m_renderFeatures.build(
+        context,
+        m_splatPath,
+        m_loadError,
+        [this, &state, &lastLoadingFrameTime] ()->bool {
+            if(state.quitRequested.load(std::memory_order_acquire))
+                return false;
+
+            double currentTime = glfwGetTime();
+
+            if((currentTime - lastLoadingFrameTime) < (1.0 / 60.0))
+                return true;
+
+            lastLoadingFrameTime = currentTime;
+
+            return m_loadingScreen.draw(
+                static_cast<float>(currentTime)
+            );
+        }
+    );
 }
 
 void Engine::destroy_render_features()
@@ -538,7 +621,13 @@ void Engine::destroy_render_features()
     m_renderFeatures.destroy(context);
 }
 
-bool Engine::init_render_resources(uint32_t width, uint32_t height)
+bool Engine::init_core_render_resources(uint32_t width, uint32_t height)
+{
+    RenderResourcesContext context = make_render_resources_context();
+    return m_renderResources.build_core_resources(context, width, height);
+}
+
+bool Engine::init_splat_render_resources()
 {
     RenderFeatureFrameInfo featureInfo = m_renderFeatures.frame_info();
 
@@ -558,8 +647,8 @@ bool Engine::init_render_resources(uint32_t width, uint32_t height)
 
     RenderResourcesContext context = make_render_resources_context();
 
-    return m_renderResources.build(
-        context, width, height, MAX_FRAMES_IN_FLIGHT,
+    return m_renderResources.build_splat_resources(
+        context, MAX_FRAMES_IN_FLIGHT,
         featureInfo.splatBuffer, m_splatEntryCapacity
     );
 }
@@ -601,6 +690,8 @@ void Engine::shutdown()
 {
     if(!m_initialized) return;
 
+    m_loadingScreen.destroy();
+    
     destroy_render_resources();
     destroy_render_features();
 
@@ -627,6 +718,8 @@ void Engine::shutdown()
 
 Engine::~Engine()
 {
+    Logger* logger = Logger::get_logger();
+
     shutdown();
-    m_logger->print("Deleted graphics engine");
+    logger->print("Deleted graphics engine");
 }

@@ -1,18 +1,34 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "renderer/resources/pipeline/RenderFeaturePipelines.hpp"
 
 #include <vector>
 
-#include "renderer/resources/shaders/shader.hpp"
+#include "renderer/resources/shaders/Shader.hpp"
 
-#include "renderer/shaderPaths.hpp"
+#include "renderer/ShaderPaths.hpp"
 
 namespace
 {
     struct ComputePipelineEntry
     {
         vk::Pipeline& pipeline;
-        const char* 
-        shaderPath;
+        ShaderAsset shader;
     };
 }
 
@@ -107,8 +123,7 @@ RenderFeaturePipelines build_render_feature_pipeline(
     for(const ComputePipelineEntry& entry : entries)
     {
         entry.pipeline = make_compute_pipeline(
-            device, entry.
-        shaderPath,
+            device, entry.shader,
             pipelineLayout, deletionQueue
         );
 

@@ -1,3 +1,20 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "backend/Utils.hpp"
 
 #include <cstring>
@@ -5,6 +22,41 @@
 #include <sstream>
 
 #include "logging/Logger.hpp"
+
+
+bool utils::vector_compare(
+    const std::vector<const char*>& vec1, 
+    const std::vector<const char*>& vec2
+) {
+    Logger* logger = Logger::get_logger();
+    std::stringstream line;
+
+    bool found;
+    for(const char* str1 : vec1)
+    {
+        found = false;
+        line.str("");
+        
+        for(const char* str2 : vec2)
+        {
+            if(std::strcmp(str1, str2) == 0)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if(!found)
+        {
+            line << str1 << " is not supported";
+            logger->print(line.str().c_str());
+
+            return false;
+        }
+    }
+
+    return true;
+}
 
 std::vector<uint32_t> utils::read_spv_file(const char* filename)
 {
@@ -68,34 +120,13 @@ std::vector<uint32_t> utils::read_spv_file(const char* filename)
     return buffer;
 }
 
-bool utils::vector_compare(const std::vector<const char*>& vec1, const std::vector<const char*>& vec2)
+uint32_t utils::divide_round_up(uint32_t value, uint32_t divisor)
 {
-    Logger* logger = Logger::get_logger();
-    std::stringstream line;
+    if(divisor == 0)
+        return 0;
 
-    bool found;
-    for(const char* str1 : vec1)
-    {
-        found = false;
-        line.str("");
-        
-        for(const char* str2 : vec2)
-        {
-            if(std::strcmp(str1, str2) == 0)
-            {
-                found = true;
-                break;
-            }
-        }
-
-        if(!found)
-        {
-            line << str1 << " is not supported";
-            logger->print(line.str().c_str());
-
-            return false;
-        }
-    }
-
-    return true;
+    return (
+        (value / divisor) +
+        static_cast<uint32_t>((value % divisor) != 0)
+    );
 }

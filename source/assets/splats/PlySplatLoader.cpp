@@ -1,4 +1,21 @@
-﻿#include "assets/splats/PlySplatLoader.hpp"
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#include "assets/splats/PlySplatLoader.hpp"
 
 #include <cmath>
 #include <limits>
@@ -44,8 +61,10 @@ namespace
     float sigmoid(double value);
 }
 
-PlySplatLoadResult load_ply_splat_cloud(const char* path)
-{
+PlySplatLoadResult load_ply_splat_cloud(
+    const std::filesystem::path& path,
+    const std::function<bool()>& progressCallback
+) {
     PlySplatLoadResult result = {};
 
     PlyReader reader;
@@ -111,6 +130,15 @@ PlySplatLoadResult load_ply_splat_cloud(const char* path)
 
     for(uint64_t vertexIndex = 0; vertexIndex < reader.vertex_count(); vertexIndex++)
     {
+        if((vertexIndex % 4096) == 0)
+        {
+            if(progressCallback && !progressCallback())
+            {
+                result.cloud.clear();
+                return result;
+            }
+        }
+
         SplatVertex splat = {};
         glm::vec3 rgb = {};
 
@@ -253,7 +281,7 @@ namespace
         if(info.category == PlyScalarCategory::FloatingPoint)
             component = clamp01(value);
         else 
-            component = clamp01((value / info.maximum));
+            component = clamp01(value / info.maximum);
 
         return true;
     }

@@ -1,4 +1,21 @@
-﻿#pragma once
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#pragma once
 
 #ifndef RENDERER_RESOURCES_SPLATS_SPLAT_FRAME_H
 #define RENDERER_RESOURCES_SPLATS_SPLAT_FRAME_H
@@ -12,40 +29,6 @@
 
 #include "renderer/resources/splats/SplatSort.hpp"
 
-struct alignas(16) GpuProjectedSplat
-{
-    glm::vec4 clipCenter {};
-    glm::vec4 conicOpacity {};
-    glm::vec4 color {};
-    glm::uvec4 tileBounds {};
-};
-
-struct alignas(8) GpuSplatEntryKey
-{
-    uint32_t tileIndex { 0 };
-    uint32_t depthKey { 0 };
-};
-
-struct alignas(8) GpuSplatEntryRange
-{
-    uint32_t entryCount { 0 };
-    uint32_t entryOffset { 0 };
-};
-
-struct alignas(16) GpuSplatCounters
-{
-    uint32_t visibleCount { 0 };
-    uint32_t entryCount { 0 };
-    uint32_t requestedEntryCount { 0 };
-    uint32_t overflowCount { 0 };
-};
-
-struct alignas(16) GpuSplatTileRange
-{
-    uint32_t startIndex { 0 };
-    uint32_t endIndex { 0 };
-};
-
 struct alignas(16) SplatTileRangePushConstant
 {
     uint32_t sortedBufferIndex { 0 };
@@ -54,6 +37,40 @@ struct alignas(16) SplatTileRangePushConstant
 struct alignas(16) SplatTileRenderPushConstant
 {
     uint32_t sortedBufferIndex { 0 };
+};
+
+struct alignas(4) GpuProjectedSplat
+{
+    glm::vec4 clipCenter {};
+    glm::vec4 conicOpacity {};
+    glm::vec4 color {};
+    glm::uvec4 tileBounds {};
+};
+
+struct alignas(4) GpuSplatEntryKey
+{
+    uint32_t tileIndex { 0 };
+    uint32_t depthKey { 0 };
+};
+
+struct alignas(4) GpuSplatEntryRange
+{
+    uint32_t entryCount { 0 };
+    uint32_t entryOffset { 0 };
+};
+
+struct alignas(4) GpuSplatCounters
+{
+    uint32_t visibleCount { 0 };
+    uint32_t entryCount { 0 };
+    uint32_t requestedEntryCount { 0 };
+    uint32_t overflowCount { 0 };
+};
+
+struct alignas(4) GpuSplatTileRange
+{
+    uint32_t startIndex { 0 };
+    uint32_t endIndex { 0 };
 };
 
 struct SplatFrameResources

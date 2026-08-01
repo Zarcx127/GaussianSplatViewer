@@ -1,3 +1,20 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #pragma once
 
 #ifndef VIEWER_H
@@ -10,21 +27,21 @@
 
 #include <GLFW/glfw3.h>
 
-#include "logging/Logger.hpp"
+#include "backend/GlfwBackend.hpp"
 
 #include "input/InputState.hpp"
 
 #include "renderer/Renderer.hpp"
 
-#include "AppState.hpp"
+#include "ViewerState.hpp"
 #include "ApplicationSession.hpp"
 
 class Viewer
 {
 public:
-    AppState state;
+    ViewerState state;
     
-    Viewer(GLFWwindow* window, Engine* engine);
+    Viewer(GlfwBackend& backend, Engine& engine);
 
     ViewerResult main_loop();
 
@@ -33,9 +50,9 @@ public:
     ~Viewer();
 
 private:
-    Logger* m_logger { nullptr };
-
+    GlfwBackend* m_backend { nullptr };
     GLFWwindow* m_window { nullptr };
+
     Engine* m_engine { nullptr };
 
     std::thread m_renderThread;

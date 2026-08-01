@@ -1,18 +1,37 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "Viewer.hpp"
 
 #include <sstream>
+
+#include "logging/Logger.hpp"
 
 namespace
 {
     constexpr double EVENT_WAIT_TIMEOUT = 1.0 / 120.0;
 }
 
-Viewer::Viewer(GLFWwindow* window, Engine* engine)
+Viewer::Viewer(GlfwBackend& backend, Engine& engine)
 {
-    m_window = window;
-    m_engine = engine;
-
-    m_logger = Logger::get_logger();
+    m_backend = &backend;
+    m_engine = &engine;
+    
+    m_window = m_backend->get_window();
 
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
@@ -20,11 +39,11 @@ Viewer::Viewer(GLFWwindow* window, Engine* engine)
     state.framebufferWidth = width;
     state.framebufferHeight = height;
 
-    glfwSetWindowUserPointer(window, this);
-    glfwSetFramebufferSizeCallback(window, window_resize_callback);
-    glfwSetKeyCallback(window, Viewer::key_callback);
-    glfwSetMouseButtonCallback(window, Viewer::mouse_button_callback);
-    glfwSetCursorPosCallback(window, Viewer::cursor_pos_callback);
+    glfwSetWindowUserPointer(m_window, this);
+    glfwSetFramebufferSizeCallback(m_window, window_resize_callback);
+    glfwSetKeyCallback(m_window, Viewer::key_callback);
+    glfwSetMouseButtonCallback(m_window, Viewer::mouse_button_callback);
+    glfwSetCursorPosCallback(m_window, Viewer::cursor_pos_callback);
 
     double mouseX = 0.0;
     double mouseY = 0.0;
@@ -38,6 +57,10 @@ Viewer::Viewer(GLFWwindow* window, Engine* engine)
 
 ViewerResult Viewer::main_loop()
 {
+    Logger* logger = Logger::get_logger();
+    
+    bool resizeEnabled = false;
+
     m_renderThread = std::thread(
         [this] ()->void {
             m_engine->render_loop(
@@ -55,6 +78,21 @@ ViewerResult Viewer::main_loop()
     ) {
         glfwWaitEventsTimeout(EVENT_WAIT_TIMEOUT);
 
+        RenderStatus renderStatus = state.renderStatus.load(std::memory_order_acquire);
+
+        if(
+            !resizeEnabled &&
+            (renderStatus == RenderStatus::Running)
+        ) {
+            glfwSetWindowAttrib(
+                m_window,
+                GLFW_RESIZABLE,
+                GLFW_TRUE
+            );
+
+            resizeEnabled = true;
+        }
+
         uint32_t fps = state.fps.load(std::memory_order_relaxed);
 
         std::stringstream title;
@@ -68,7 +106,7 @@ ViewerResult Viewer::main_loop()
     if(m_renderThread.joinable())
         m_renderThread.join();
 
-    m_logger->print("Window Closed");
+    logger->print("Window Closed");
 
     const RenderStatus renderStatus = 
         state.renderStatus.load(std::memory_order_acquire);
@@ -115,6 +153,12 @@ void Viewer::key_callback(GLFWwindow* window, int key, int scancode, int action,
     Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
 
+    RenderStatus renderStatus = 
+        app->state.renderStatus.load(std::memory_order_acquire);
+
+    if(renderStatus != RenderStatus::Running)
+        return;
+
     bool pressed = (action != GLFW_RELEASE);
 
     std::lock_guard<std::mutex> lock(app->m_inputMutex);
@@ -134,6 +178,12 @@ void Viewer::mouse_button_callback(GLFWwindow* window, int button, int action, i
 {
     Viewer* app = reinterpret_cast<Viewer*>(glfwGetWindowUserPointer(window));
     if(!app) return;
+
+    RenderStatus renderStatus = 
+        app->state.renderStatus.load(std::memory_order_acquire);
+
+    if(renderStatus != RenderStatus::Running)
+        return;
 
     if(button != GLFW_MOUSE_BUTTON_RIGHT)
         return;

@@ -1,4 +1,21 @@
-﻿#include "assets/ply/PlyReader.hpp"
+﻿/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#include "assets/ply/PlyReader.hpp"
 
 #include <limits>
 #include <sstream>
@@ -16,12 +33,12 @@ namespace
     );
 }
 
-bool PlyReader::open(const char* path, const char*& error)
+bool PlyReader::open(const std::filesystem::path& path, const char*& error)
 {
     close();
     
     error = nullptr;
-    if(!path || (path[0] == '\0'))
+    if(path.empty())
     {
         error = "PLY path is empty";
         return false;
@@ -53,6 +70,7 @@ void PlyReader::close()
     m_format = PlyFormat::Unknown;
     m_vertexCount = 0;
 
+    m_preVertexElements.clear();
     m_vertexProperties.clear();
 }
 
@@ -119,8 +137,11 @@ bool PlyReader::parse_header(const char*& error)
         return false;
     }
 
+    bool foundVertexElement = false;
     bool readingVertexElement = false;
     bool foundEndHeader = false;
+
+    PlyElement* currentPreVertexElement = nullptr;
 
     while(std::getline(m_file, line))
     {
@@ -168,22 +189,80 @@ bool PlyReader::parse_header(const char*& error)
             stream >> elementName >> elementCount;
 
             readingVertexElement = (elementName == "vertex");
+            currentPreVertexElement = nullptr;
+
             if(readingVertexElement)
+            {
+                if(foundVertexElement)
+                {
+                    error = "PLY header contains multiple vertex elements";
+                    return false;
+                }
+
+                foundVertexElement = true;
                 m_vertexCount = elementCount;
+            }
+            else if(!foundVertexElement)
+            {
+                m_preVertexElements.push_back({elementCount, {}});
+
+                currentPreVertexElement = &m_preVertexElements.back();
+            }
 
             continue;
         }
         else if(token == "property")
         {
-            if(!readingVertexElement) continue;
+            if(!readingVertexElement && !currentPreVertexElement) 
+                continue;
 
             std::string type;
             stream >> type;
 
-            if(type == "list")
+             if(type == "list")
             {
-                error = "List properties inside vertex elements are not supported";
-                return false;
+                std::string listCountType;
+                std::string scalarType;
+                std::string name;
+
+                stream >> listCountType >> scalarType >> name;
+
+                if(!stream || name.empty())
+                {
+                    error = "Invalid PLY list property";
+                    return false;
+                }
+
+                if(readingVertexElement)
+                {
+                    error = "List properties inside vertex elements are not supported";
+                    return false;
+                }
+
+                PlyScalarInfo listCountScalar = parse_ply_scalar_info(listCountType);
+                PlyScalarInfo scalar = parse_ply_scalar_info(scalarType);
+
+                if(
+                    (listCountScalar.category == PlyScalarCategory::Invalid) ||
+                    (scalar.category == PlyScalarCategory::Invalid)
+                ) {
+                    error = "Unsupported PLY list property type";
+                    return false;
+                }
+
+                if(listCountScalar.category == PlyScalarCategory::FloatingPoint)
+                {
+                    error = "PLY list count must use an integer type";
+                    return false;
+                }
+
+                currentPreVertexElement->properties.push_back({
+                    true,
+                    scalar,
+                    listCountScalar
+                });
+
+                continue;
             }
 
             std::string name;
@@ -202,7 +281,10 @@ bool PlyReader::parse_header(const char*& error)
                 return false;
             }
 
-            m_vertexProperties.push_back({name, scalarType});
+            if(readingVertexElement)
+                m_vertexProperties.push_back({name, scalarType});
+            else
+                currentPreVertexElement->properties.push_back({false, scalarType, {}});
         }
     }
 
@@ -244,6 +326,52 @@ bool PlyReader::parse_header(const char*& error)
         error = "PLY vertex count is too large for this platform";
         return false;
     }
+
+    if(!skip_pre_vertex_elements(error))
+        return false;
+
+    return true;
+}
+
+bool PlyReader::skip_pre_vertex_elements(const char*& error)
+{
+    for(const PlyElement& element : m_preVertexElements)
+    {
+        for(uint64_t elementIndex = 0; elementIndex < element.count; elementIndex++)
+        {
+            for(const PlyElementProperty& property : element.properties)
+            {
+                if(!property.isList)
+                {
+                    double value = 0.0;
+                    if(!read_scalar(property.scalar, value, error))
+                        return false;
+
+                    continue;
+                }
+
+                double listCountValue = 0.0;
+                if(!read_scalar(property.listCountScalar, listCountValue, error))
+                    return false;
+
+                if(listCountValue < 0.0)
+                {
+                    error = "PLY list property contains a negative count";
+                    return false;
+                }
+
+                uint64_t listCount = static_cast<uint64_t>(listCountValue);
+                for(uint64_t listIndex = 0; listIndex < listCount; listIndex++)
+                {
+                    double value = 0.0;
+                    if(!read_scalar(property.scalar, value, error))
+                        return false;
+                }
+            }
+        }
+    }
+
+    m_preVertexElements.clear();
 
     return true;
 }

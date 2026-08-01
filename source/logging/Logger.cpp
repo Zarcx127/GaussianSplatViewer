@@ -1,3 +1,20 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #include "logging/Logger.hpp"
 
 #include "BuildConfig.hpp"
@@ -23,9 +40,9 @@ using std::cout;
 using std::endl;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagBitsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    VkDebugUtilsMessageSeverityFlagBitsEXT,
+    VkDebugUtilsMessageTypeFlagBitsEXT,
+    const VkDebugUtilsMessengerCallbackDataEXT*,
     void* pUserData
 );
 
@@ -200,10 +217,6 @@ void Logger::log(const vk::SurfaceCapabilitiesKHR& capabilities, const char* pre
     stringList = parse_alpha_composite_bits(capabilities.supportedCompositeAlpha);
     cout << prefix << "supported alpha operation: " << endl;
     print_vector(stringList, "\t\t");
-
-    stringList = parse_image_usage_bits(capabilities.supportedUsageFlags);
-    cout << prefix << "supported image usage: " << endl;
-    print_vector(stringList, "\t\t");
 }
 
 void Logger::log(const vk::Extent2D& extent, const char* prefix)
@@ -248,10 +261,10 @@ void Logger::log(const VmaAllocationInfo& info, const char* prefix)
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagBitsEXT messageType,
+    VkDebugUtilsMessageSeverityFlagBitsEXT,
+    VkDebugUtilsMessageTypeFlagBitsEXT,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData
+    void*
 ) {
     std::cerr << "validation layer: " << pCallbackData->pMessage << endl;
 
@@ -314,90 +327,6 @@ vector<const char*> Logger::parse_alpha_composite_bits(vk::CompositeAlphaFlagsKH
     return results;
 }
 
-vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits)
-{
-    vector<const char*> results;
-    using Flags = vk::ImageUsageFlagBits;
-
-    if(bits & Flags::eTransferSrc)
-        results.push_back("transfer src: image can be used as the source of a transfer command");
-    
-    if(bits & Flags::eTransferDst)
-        results.push_back("transfer dst: image can be used as the destination of a transfer command");
-
-    if(bits & Flags::eSampled)
-    {
-        results.push_back(
-            "sampled: image can be used to create a VkImageView suitable for occupying "
-            "a VkDescription slot either or type of type VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE "
-            "or VK_DESCRIPTION_TYPE_COMBINED_IMAGE_SAMPLER, and be sampled by a shader"
-        );
-    }
-
-	if(bits & Flags::eStorage)
-    {
-		results.push_back(
-            "storage: image can be used to create a VkImageView suitable for occupying a "
-            "VkDescriptorSet slot of type VK_DESCRIPTOR_TYPE_STORAGE_IMAGE."
-        );
-	}
-
-	if(bits & Flags::eColorAttachment) 
-    {
-		results.push_back(
-            "color attachment: image can be used to create a VkImageView suitable for use "
-            "as a color or resolve attachment in a VkFramebuffer."
-        );
-	}
-
-	if(bits & Flags::eDepthStencilAttachment) 
-    {
-		results.push_back(
-            "depth/stencil attachment: image can be used to create a VkImageView "
-            "suitable for use as a depth/stencil or depth/stencil resolve attachment "
-            "in a VkFramebuffer."
-        );
-	}
-
-	if(bits & Flags::eTransientAttachment) 
-    {
-		results.push_back(
-            "transient attachment: implementations may support using memory allocations "
-            "with the VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT to back an image with this usage. "
-            "This bit can be set for any image that can be used to create a VkImageView suitable "
-            "for use as a color, resolve, depth/stencil, or input attachment."
-        );
-	}
-
-	if(bits & Flags::eInputAttachment) 
-    {
-		results.push_back(
-            "input attachment: image can be used to create a VkImageView suitable for "
-            "occupying VkDescriptorSet slot of type VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; "
-            "be read from a shader as an input attachment; and be used as an input attachment "
-            "in a framebuffer."
-        );
-	}
-
-	if(bits & Flags::eFragmentDensityMapEXT) 
-    {
-		results.push_back(
-            "fragment density map: image can be used to create a VkImageView suitable "
-            "for use as a fragment density map image."
-        );
-	}
-
-	if(bits & Flags::eFragmentShadingRateAttachmentKHR) 
-    {
-		results.push_back(
-            "fragment shading rate attachment: image can be used to create a VkImageView "
-            "suitable for use as a fragment shading rate attachment or shading rate image"
-        );
-	}
-    
-    return results;
-}
-
 #else
 
 void Logger::print(const char* msg) {}
@@ -426,11 +355,6 @@ vector<const char*> Logger::parse_transform_bits(vk::SurfaceTransformFlagsKHR bi
 }
 
 vector<const char*> Logger::parse_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits) 
-{
-    return vector<const char*>{};
-}
-
-vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits) 
 {
     return vector<const char*>{};
 }

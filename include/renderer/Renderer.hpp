@@ -1,3 +1,20 @@
+/**
+ * Copyright (C) 2026  Zarcx127@github.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ **/
+
 #pragma once
 
 #ifndef RENDERER_RENDERER_H
@@ -5,14 +22,13 @@
 
 #include <deque>
 #include <functional>
+#include <filesystem>
 
 #include <vulkan/vulkan.hpp>
 
 #include <GLFW/glfw3.h>
 
-#include "AppState.hpp"
-
-#include "logging/Logger.hpp"
+#include "ViewerState.hpp"
 
 #include "input/InputState.hpp"
 
@@ -22,13 +38,14 @@
 
 #include "renderer/resources/shaders/ShaderInterface.hpp"
 
+#include "renderer/LoadingScreen.hpp"
 #include "renderer/RenderFeatures.hpp"
 #include "renderer/RenderResources.hpp"
 
 class Engine
 {
 public:
-    Engine(GLFWwindow* window, const char* splatPath);
+    Engine(GLFWwindow* window, const std::filesystem::path& splatPath);
 
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
@@ -37,7 +54,7 @@ public:
     Engine& operator=(Engine&&) = delete;
 
     void render_loop(
-        AppState& state, 
+        ViewerState& state, 
         const std::function<InputState()>& getInput
     );
     
@@ -48,10 +65,8 @@ public:
 private:
     GLFWwindow* m_window { nullptr };
 
-    const char* m_splatPath { nullptr };
+    std::filesystem::path m_splatPath {};
     const char* m_loadError { nullptr };
-
-    Logger* m_logger { nullptr };
 
     std::deque<std::function<void(vk::Device)>> m_interfaceDeletionQueue;
     
@@ -65,6 +80,7 @@ private:
 
     vk::PipelineLayout m_pipelineLayout {};
 
+    LoadingScreen m_loadingScreen;
     RenderFeatures m_renderFeatures;
     RenderResources m_renderResources;
 
@@ -89,15 +105,16 @@ private:
         FatalError
     };
 
-    bool init(uint32_t width, uint32_t height);
+    bool init(uint32_t width, uint32_t height, ViewerState& state);
 
     DrawResult draw(uint32_t width, uint32_t height, const InputState& input);
-    void update_timing(AppState& state);
+    void update_timing(ViewerState& state);
 
-    bool init_render_features();
+    bool init_render_features(ViewerState& state);
     void destroy_render_features();
 
-    bool init_render_resources(uint32_t width, uint32_t height);
+    bool init_core_render_resources(uint32_t width, uint32_t height);
+    bool init_splat_render_resources();
     void destroy_render_resources();
 
     RenderFeaturesContext make_render_features_context();
