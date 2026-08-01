@@ -7,6 +7,8 @@ Most GPUs including integrated ones like Intel UHD Graphics should have this by 
 
 <img width="510" height="404" alt="Image" src="https://github.com/user-attachments/assets/360a318e-c7a8-4382-b2f5-a0f06f090f81" />
 
+<img width="510" height="404" alt="Image" src="https://github.com/user-attachments/assets/df7cc5e4-6ee7-4c58-9b32-bf04d756a5d5" />
+
 ### Requirements (for running)
 
 1. Windows 10 or later (required)
