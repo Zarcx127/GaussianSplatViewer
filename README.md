@@ -1,6 +1,6 @@
 # Gaussian Splat Viewer
 
-This is an application that allows viewing gaussian splats (.ply ONLY) in an easy way.
+This is an application that allows viewing gaussian splats (.ply only) in an easy way.
 The renderer is made with Vulkan and GLSL.
 Currently, it runs ONLY on Windows 10 or later with a GPU that has Vulkan support. 
 Most GPUs including integrated ones like Intel UHD Graphics should have this by default.
