@@ -1,6 +1,6 @@
 # Gaussian Splat Viewer
 
-This is an application that allows viewing gaussian splats (.ply ONLY) in an easy way.
+This is an application that allows viewing gaussian splats (.ply only) in an easy way.
 The renderer is made with Vulkan and GLSL.
 Currently, it runs ONLY on Windows 10 or later with a GPU that has Vulkan support. 
 Most GPUs including integrated ones like Intel UHD Graphics should have this by default.
@@ -17,9 +17,8 @@ Most GPUs including integrated ones like Intel UHD Graphics should have this by 
 4. 8 GB RAM (recommended)
 
 ***Note:***<br>
-Since GPU cap is not currently implemented it would utilise all GPU resources if unrestricted.
-This should not cause any problems. 
-To prevent overheating, close the viewer when it is not in use.
+Since there is no frame rate limiter, the GPU would utilise all available resources (unless externally restricted).
+Close the viewer when not in use to reduce power consumption and heat.
 
 ### Troubleshooting (Running)
 
@@ -28,7 +27,7 @@ If you do not trust the executable in release, you can always just build the pro
 (Refer to Code Installation below)
 
 If the viewer feels laggy, shrink the size of the window.
-This is to reduce the number of splats that need to be processed, so you will get a smoother experience
+This is to reduce the per-pixel GPU work, so you will get a smoother experience
 
 ## Controls
 
@@ -82,8 +81,8 @@ The executable is inside the attached zip.
 ### Hardware Requirements (for building)
 
 1. GPU with Vulkan support (required)
-2. 16GB RAM at least (required)
-3. 1GB Storage at least (required)
+2. At least 16GB RAM (required)
+3. At least 1GB Storage (required)
 4. Quad-core processor or better (recommended)
 
 ### Software Requirements (for building)
@@ -99,7 +98,7 @@ Unfortunately, this is a requirement to run and compile the code as I have set s
 - `VK_ADD_LAYER_PATH`
 
 Do note that the build will fail on other editors.
-(Unless you have configured the environment variables yourself) 
+(Unless you have configured the environment variables manually) 
 
 Even if you have C++ and Vulkan installed, this still needs to be run.
 This is to ensure that all dependencies are the same as mine to prevent any unexpected errors.
