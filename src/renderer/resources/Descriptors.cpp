@@ -1,7 +1,5 @@
 #include "renderer/resources/Descriptors.hpp"
 
-#ifdef DESCRIPTORS_H
-
 #include "logging/Logger.hpp"
 
 DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(vk::Device& device)
@@ -17,8 +15,8 @@ vk::DescriptorSetLayout DescriptorSetLayoutBuilder::build(
     vk::DescriptorSetLayoutCreateInfo layoutInfo = {};
 
     layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits();
-    layoutInfo.bindingCount = m_layoutBinding.size();
-    layoutInfo.pBindings = m_layoutBinding.data();
+    layoutInfo.bindingCount = m_layoutBindings.size();
+    layoutInfo.pBindings = m_layoutBindings.data();
 
     vk::ResultValue<vk::DescriptorSetLayout> layoutAttempt = 
         m_device->createDescriptorSetLayout(layoutInfo);
@@ -47,17 +45,86 @@ void DescriptorSetLayoutBuilder::add_entry(
 ) {
     vk::DescriptorSetLayoutBinding entry = {};
 
-    entry.binding = m_layoutBinding.size();
+    entry.binding = m_layoutBindings.size();
     entry.descriptorCount = 1;
     entry.descriptorType = type;
     entry.stageFlags = stage;
 
-    m_layoutBinding.push_back(entry);
+    m_layoutBindings.push_back(entry);
 }
 
 void DescriptorSetLayoutBuilder::reset()
 {
-    m_layoutBinding.clear();
+    m_layoutBindings.clear();
 }
 
-#endif
+DescriptorPoolBuilder::DescriptorPoolBuilder(vk::Device& device)
+{
+    m_device = &device;
+}
+
+vk::DescriptorPool DescriptorPoolBuilder::build(uint32_t descriptorSetCount, std::deque<std::function<void(vk::Device)>>& deletionQueue)
+{
+    Logger* logger = Logger::get_logger();
+    vk::DescriptorPoolCreateInfo poolInfo = {};
+
+    poolInfo.flags = vk::DescriptorPoolCreateFlagBits();
+    poolInfo.maxSets = descriptorSetCount;
+    poolInfo.poolSizeCount = m_poolSizes.size();
+    poolInfo.pPoolSizes = m_poolSizes.data();
+
+    vk::ResultValue<vk::DescriptorPool> descriptorPoolAttempt =
+        m_device->createDescriptorPool(poolInfo);
+
+    if(descriptorPoolAttempt.result != vk::Result::eSuccess)
+    {
+        logger->print("Failed to create descriptor pool");
+        return vk::DescriptorPool();
+    }
+
+    logger->print("Created descriptor pool");
+
+    vk::DescriptorPool descriptorPool = descriptorPoolAttempt.value;
+    deletionQueue.push_back([logger, descriptorPool] (vk::Device device)->void{
+        device.destroy(descriptorPool);
+        logger->print("Deleted descriptor pool");
+    });
+
+    return descriptorPool;
+}
+
+void DescriptorPoolBuilder::add_entry(vk::DescriptorType bindingType)
+{
+    vk::DescriptorPoolSize poolSize = {};
+
+    poolSize.descriptorCount = 3;
+    poolSize.type = bindingType;
+    
+    m_poolSizes.push_back(poolSize);
+}
+
+vk::DescriptorSet allocate_descriptor_set(
+    vk::Device device, 
+    vk::DescriptorPool& descriptorPool, 
+    vk::DescriptorSetLayout& descriptorSetLayout
+) {
+    Logger* logger = Logger::get_logger();
+
+    vk::DescriptorSetAllocateInfo allocationInfo = {};
+    allocationInfo.descriptorPool = descriptorPool;
+    allocationInfo.descriptorSetCount = 1;
+    allocationInfo.pSetLayouts = &descriptorSetLayout;
+
+    vk::ResultValue<std::vector<vk::DescriptorSet>> descriptorSetAttempt =
+        device.allocateDescriptorSets(allocationInfo);
+
+    if(descriptorSetAttempt.result != vk::Result::eSuccess)
+    {
+        logger->print("Failed to allocate descriptor set");
+        return vk::DescriptorSet();
+    }
+
+    logger->print("Allocated descriptor set");
+
+    return descriptorSetAttempt.value[0];
+}

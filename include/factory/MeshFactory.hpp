@@ -14,7 +14,7 @@
 
 struct Vertex
 {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
 };
 
@@ -33,6 +33,14 @@ vk::VertexInputBindingDescription2EXT get_binding_description();
 std::vector<vk::VertexInputAttributeDescription2EXT> get_attribute_descriptions();
 
 Mesh build_triangle(
+    VmaAllocator& allocator, 
+    vk::Device& device,
+    vk::CommandPool& commandPool,
+    vk::Queue& queue,
+    std::deque<std::function<void(VmaAllocator)>>& deletionQueue
+);
+
+Mesh build_cube(
     VmaAllocator& allocator, 
     vk::Device& device,
     vk::CommandPool& commandPool,

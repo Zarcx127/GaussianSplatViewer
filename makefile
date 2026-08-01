@@ -1,27 +1,4 @@
-# --- Make commands ---
-
-# reload 
-# 	run .exe after rebuilding objs and shaders
-
-# restart
-#	run .exe after rebuilding objs and shaders
-#	shaders are recompiled
-
-# clean_run
-#	run .exe after rebuilding shaders and obj
-#	both shaders and obj are recompiled
-
-# create [path_to_file]
-#	creates respective .hpp and .cpp file 
-
-# delete [path_to_file]
-# 	deletes both .hpp and .cpp file
-# 	if subfolder is empty, delete it as well
-# 	(run clean_run on next compile)
-
-# --- End Make Commands ---
-
-OUT := a.exe
+OUT := graphics.exe
 
 CURR_DIR := $(subst \,/,$(abspath .))/
 
@@ -30,8 +7,10 @@ INC_DIR := $(CURR_DIR)include/
 SRC_DIR := $(CURR_DIR)src/
 OBJ_DIR := $(CURR_DIR)obj/
 
+JOBS := $(shell set /a NUMBER_OF_PROCESSORS-1)
+
 CC := g++
-FLAGS_OBJ := -std=c++17 -O2 \
+FLAGS_OBJ := -std=c++17 -O2 -Werror \
 	-DVULKAN_HPP_NO_EXCEPTIONS \
 	-DGLFW_INCLUDE_NONE \
 	-DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
@@ -54,7 +33,7 @@ SPV_FILES := $(addsuffix .spv,$(addprefix $(SHD_DIR)bin/,$(notdir $(SHADERS))))
 
 mode ?= debug
 ifeq ($(mode), debug)
-    FLAGS_OBJ += -DDEBUG=1
+    FLAGS_OBJ += -DDEBUG
 else ifeq ($(mode), release)
     FLAGS_OBJ += -DRELEASE
 else
@@ -87,15 +66,15 @@ endif
 .PHONY: reload restart all clean_run run build build_shaders clean clean_shaders clean_obj create delete
 
 reload: 
-	@make --no-print-directory -j$(NUMBER_OF_PROCESSORS) all
+	@make --no-print-directory -j$(JOBS) all
 	@make --no-print-directory run
 
 restart: clean_shaders
-	@make --no-print-directory -j$(NUMBER_OF_PROCESSORS) all
+	@make --no-print-directory -j$(JOBS) all
 	@make --no-print-directory run
 
 clean_run: clean
-	@make --no-print-directory -j$(NUMBER_OF_PROCESSORS) all
+	@make --no-print-directory -j$(JOBS) all
 	@make --no-print-directory run
 
 build: $(OBJs)
@@ -107,7 +86,7 @@ $(SHD_DIR)bin/%.spv: $(SHD_DIR)%
 	glslc "$<" -o "$@"
 
 run:
-	@if not exist "$(CURR_DIR)$(OUT)" (echo ERROR: $(OUT) does not exist & exit 1)
+	@if not exist "$(CURR_DIR)$(OUT)" (make --no-print-directory -j$(NUMBER_OF_PROCESSORS) all)
 
 	@powershell -Command "Clear-Host"
 	@$(OUT) 

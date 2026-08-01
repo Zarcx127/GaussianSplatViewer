@@ -75,9 +75,6 @@ else
     $content = @"
 #include `"$includePath`"
 
-#ifdef $guard
-
-#endif
 "@
 }
 

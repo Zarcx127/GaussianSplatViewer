@@ -1,10 +1,5 @@
 #include "App.hpp"
 
-#ifdef APP_H
-
-using std::atomic;
-using std::thread;
-
 static void window_resize_callback(GLFWwindow* window, int width, int height);
 
 App::App(GLFWwindow* window, Engine* engine)
@@ -30,7 +25,6 @@ void App::main_loop()
         m_engine->update_timing();
     }
 
-    m_running = false;
     m_logger->print("Window Closed");
 }
 
@@ -45,5 +39,3 @@ static void window_resize_callback(GLFWwindow* window, int width, int height)
     Engine* engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
     engine->rebuildSwapchain = true;
 }
-
-#endif

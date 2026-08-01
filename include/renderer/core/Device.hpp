@@ -15,7 +15,7 @@ bool is_suitable(const vk::PhysicalDevice device);
 
 vk::PhysicalDevice choose_physical_device(const vk::Instance instance);
 
-uint32_t findQueueFamilyIndex(
+uint32_t find_queue_family_index(
     vk::PhysicalDevice physicalDevice, 
     vk::SurfaceKHR surface, 
     vk::QueueFlags queueType

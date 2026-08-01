@@ -1,7 +1,5 @@
 #include "renderer/core/Image.hpp"
 
-#ifdef IMAGE_H
-
 #include "logging/Logger.hpp"
 
 vk::ImageView create_image_view(vk::Device logicalDevice, vk::Image image, vk::Format format)
@@ -69,5 +67,3 @@ void transition_image_layout(
         srcStage, dstStage, vk::DependencyFlags(), nullptr, nullptr, barrier
     );
 } 
-
-#endif

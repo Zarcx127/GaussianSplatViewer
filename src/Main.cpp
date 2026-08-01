@@ -16,19 +16,16 @@ int main()
     logger->set_mode(true);
 
     int width = 800, height = 600;
-    GLFWwindow* window = build_window(width, height, "ID Tech 12");
+    Window window(width, height, "Graphics");
+    if(!window.build_window())
+        return 1;
 
-    Engine* engine = new Engine(window);
-    App* app = new App(window, engine);
+    Engine engine(window.get_window());
+    if(!engine.init())
+        return 1;
 
-    delete app;
-    delete engine;
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    Logger::clean_up();
+    App app(window.get_window(), &engine);
+    app.main_loop();
 
     return 0;
 }
-

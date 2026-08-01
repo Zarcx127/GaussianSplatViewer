@@ -1,7 +1,5 @@
 #include "renderer/core/Device.hpp"
 
-#ifdef DEVICE_H
-
 #include <vector>
 #include <algorithm>
 
@@ -86,7 +84,7 @@ vk::PhysicalDevice choose_physical_device(const vk::Instance instance)
     return suitableDevices[0];
 }
 
-uint32_t findQueueFamilyIndex(
+uint32_t find_queue_family_index(
     vk::PhysicalDevice physicalDevice, 
     vk::SurfaceKHR surface, 
     vk::QueueFlags queueType
@@ -123,7 +121,7 @@ vk::Device create_logical_device(
 ) {
     Logger* logger = Logger::get_logger();
 
-    uint32_t graphicsIndex = findQueueFamilyIndex(physicalDevice, surface, vk::QueueFlagBits::eGraphics);
+    uint32_t graphicsIndex = find_queue_family_index(physicalDevice, surface, vk::QueueFlagBits::eGraphics);
     float queuePriority = 1.0f;
 
     vk::DeviceQueueCreateInfo queueInfo = vk::DeviceQueueCreateInfo(
@@ -235,5 +233,3 @@ namespace
         return (vram / GIGABYTE);
     }
 }
-
-#endif

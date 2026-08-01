@@ -1,36 +1,50 @@
 #include "renderer/core/Frame.hpp"
 
-#ifdef FRAME_H
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "factory/MeshFactory.hpp"
 
 #include "renderer/core/Image.hpp"
 #include "renderer/core/Synchronization.hpp"
 
+#include "renderer/resources/Descriptors.hpp"
+
 Frame::Frame(
-    Swapchain& swapchain, 
+    Swapchain* swapchain, 
     vk::Device device, 
-    std::vector<vk::ShaderEXT>& shaders, 
-    vk::CommandBuffer commandBuffer,
+    std::vector<vk::ShaderEXT>* shaders, 
+    vk::CommandBuffer& commandBuffer,
+    vk::DescriptorSetLayout* descriptorSetLayout,
+    vk::DescriptorPool* descriptorPool,
+    vk::PipelineLayout* pipelineLayout,
     Mesh* mesh,
     std::deque<std::function<void(vk::Device)>>& deletionQueue
 ) {
     this->swapchain = swapchain;
     this->shaders = shaders;
     this->commandBuffer = commandBuffer;
+
+    m_descriptorSetLayout = descriptorSetLayout;
+    m_descriptorPool = descriptorPool;
+    m_pipelineLayout = pipelineLayout;
+    
+    m_descriptorSet = allocate_descriptor_set(device, *descriptorPool, *descriptorSetLayout);
     
     m_mesh = mesh;
 
     imageAquiredSemaphore = make_semaphore(device, deletionQueue);
 
-    renderFinishedSemaphores.resize(swapchain.imageViews.size());
+    renderFinishedSemaphores.resize(swapchain->imageViews.size());
     for(vk::Semaphore& renderFinishedSemaphore : renderFinishedSemaphores)
         renderFinishedSemaphore = make_semaphore(device, deletionQueue);
 
     renderFinishedFence = make_fence(device, deletionQueue);
 }
 
-void Frame::record_command_buffer(uint32_t imageIndex) 
+void Frame::record_command_buffer(uint32_t imageIndex, const glm::mat4& mvp) 
 {
     (void) commandBuffer.reset();
 
@@ -44,7 +58,7 @@ void Frame::record_command_buffer(uint32_t imageIndex)
 
     transition_image_layout(
         commandBuffer,
-        swapchain.images[imageIndex],
+        swapchain->images[imageIndex],
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eColorAttachmentOptimal,
         vk::AccessFlagBits::eNone,
@@ -62,15 +76,24 @@ void Frame::record_command_buffer(uint32_t imageIndex)
         vk::ShaderStageFlagBits::eFragment
     };
 
-    commandBuffer.bindShadersEXT(stages, shaders);
+    commandBuffer.bindShadersEXT(stages, *shaders);
     commandBuffer.bindVertexBuffers(0, 1, &(m_mesh->buffer), &(m_mesh->offset));
-    commandBuffer.draw(3, 1, 0, 0);
+
+    commandBuffer.pushConstants(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eVertex,
+        0,
+        sizeof(glm::mat4),
+        &mvp
+    );
+    
+    commandBuffer.draw(m_mesh->numOfVertices, 1, 0, 0);
 
     commandBuffer.endRenderingKHR();
 
     transition_image_layout(
         commandBuffer,
-        swapchain.images[imageIndex],
+        swapchain->images[imageIndex],
         vk::ImageLayout::eColorAttachmentOptimal,
         vk::ImageLayout::ePresentSrcKHR,
         vk::AccessFlagBits::eColorAttachmentWrite,
@@ -85,7 +108,7 @@ void Frame::record_command_buffer(uint32_t imageIndex)
 void Frame::build_rendering_info()
 {
     m_renderingInfo.flags = vk::RenderingFlagsKHR();
-    m_renderingInfo.renderArea = vk::Rect2D({0, 0}, swapchain.extent);
+    m_renderingInfo.renderArea = vk::Rect2D({0, 0}, swapchain->extent);
     m_renderingInfo.viewMask = 0;
     m_renderingInfo.layerCount = 1;
     m_renderingInfo.colorAttachmentCount = 1;
@@ -94,7 +117,7 @@ void Frame::build_rendering_info()
 
 void Frame::build_color_attachment(uint32_t imageIndex)
 {
-    m_colorAttachment.imageView = swapchain.imageViews[imageIndex];
+    m_colorAttachment.imageView = swapchain->imageViews[imageIndex];
     m_colorAttachment.imageLayout = vk::ImageLayout::eAttachmentOptimal;
     m_colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     m_colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -110,10 +133,10 @@ void Frame::initialize_render_state()
     commandBuffer.setVertexInputEXT(1, &binding, 2, attributes.data());
 
     vk::Viewport viewport = vk::Viewport(
-        0.0f, 0.0f, swapchain.extent.width, swapchain.extent.height, 0.0f, 1.0f
+        0.0f, 0.0f, swapchain->extent.width, swapchain->extent.height, 0.0f, 1.0f
     );
 
-    vk::Rect2D scissor = vk::Rect2D({0, 0}, swapchain.extent);
+    vk::Rect2D scissor = vk::Rect2D({0, 0}, swapchain->extent);
 
     vk::ColorBlendEquationEXT equation;
 	
@@ -146,5 +169,3 @@ void Frame::initialize_render_state()
 	commandBuffer.setStencilTestEnable(VK_FALSE);
 	commandBuffer.setPrimitiveRestartEnable(VK_FALSE);
 }
-
-#endif

@@ -15,7 +15,6 @@ class Logger
 {    
 public:
     static Logger* get_logger();
-    static void clean_up();
 
     void set_mode(bool mode);
     bool is_enabled();
@@ -41,8 +40,6 @@ public:
     void log(const VmaAllocationInfo& info, const char* prefix = "\t");
 
 private:
-    static Logger* logger;
-
     bool m_enabled { false };
     
     std::vector<const char*> parse_transform_bits(vk::SurfaceTransformFlagsKHR bits);

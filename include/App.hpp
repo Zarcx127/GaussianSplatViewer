@@ -3,9 +3,6 @@
 #ifndef APP_H
 #define APP_H
 
-#include <atomic>
-#include <thread>
-
 #include <glfw/glfw3.h>
 
 #include "logging/Logger.hpp"
@@ -24,8 +21,6 @@ private:
 
     GLFWwindow* m_window { nullptr };
     Engine* m_engine { nullptr };
-
-    std::atomic<bool> m_running { true };
 };
 
 #endif

@@ -1,7 +1,5 @@
 #include "renderer/core/Swapchain.hpp"
 
-#ifdef SWAPCHAIN_H
-
 #include "logging/Logger.hpp"
 
 #include "renderer/core/Image.hpp"
@@ -22,10 +20,9 @@ void Swapchain::build(
     vk::PresentModeKHR presentMode = choose_present_mode(support.presentModes);
 
     extent = choose_extent(width, height, support.capabilities);
-    imageCount = std::min(
-        support.capabilities.maxImageCount,
-        support.capabilities.minImageCount + 1
-    );
+    imageCount = support.capabilities.minImageCount + 1;
+    if(support.capabilities.maxImageCount > 0)
+        imageCount = std::min(imageCount, support.capabilities.maxImageCount);
 
     vk::SwapchainCreateInfoKHR createInfo = vk::SwapchainCreateInfoKHR(
         vk::SwapchainCreateFlagsKHR(),
@@ -72,7 +69,7 @@ void Swapchain::build(
         vk::ImageView imageViewHandle = imageViews[i];
         deletionQueue.push_back([imageViewHandle, logger] (vk::Device device)->void{
             device.destroyImageView(imageViewHandle);
-            logger->print("Destroyed image view");
+            logger->print("Deleted image view");
         });
     }
 
@@ -148,5 +145,3 @@ vk::SurfaceFormatKHR Swapchain::choose_surface_format(const std::vector<vk::Surf
 
     return formats[0];
 }
-
-#endif

@@ -1,12 +1,14 @@
 #include "renderer/resources/Allocator.hpp"
 
-#ifdef ALLOCATOR_H
+#include "logging/Logger.hpp"
 
 VmaAllocator make_vma_allocator(
     vk::Instance instance, 
     vk::PhysicalDevice physicalDevice, 
     vk::Device logicalDevice
 ) {
+    Logger* logger = Logger::get_logger();
+
     uint32_t version = vk::enumerateInstanceVersion().value;
     version &= ~(0xFFFU);
 
@@ -18,9 +20,12 @@ VmaAllocator make_vma_allocator(
     allocatorInfo.vulkanApiVersion = version;
 
     VmaAllocator vmaAllocator;
-    vmaCreateAllocator(&allocatorInfo, &vmaAllocator);
+    VkResult vmaAllocatorResult = vmaCreateAllocator(&allocatorInfo, &vmaAllocator);
+    if(vmaAllocatorResult != VK_SUCCESS)
+    {
+        logger->print("Failed to create VMA Allocator");
+        return nullptr;
+    }
 
     return vmaAllocator;
 }
-
-#endif

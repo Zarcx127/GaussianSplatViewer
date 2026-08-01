@@ -1,0 +1,38 @@
+/// Make Commands ///
+
+reload mode=[mode]
+    run .exe after rebuilding objs and shaders
+	mode = debug/release
+	by default mode = debug
+
+restart mode=[mode]
+	run .exe after rebuilding objs and shaders
+	shaders are recompiled
+	mode = debug/release
+	by default mode = debug
+
+clean_run mode=[mode]
+    run .exe after rebuilding shaders and obj
+	both shaders and obj are recompiled
+	mode = debug/release
+	by default mode = debug
+
+create [path_to_file]
+    creates respective .hpp and .cpp file 
+
+delete [path_to_file]
+ 	deletes both .hpp and .cpp file
+ 	if subfolder is empty, delete it as well
+ 	(run clean_run on next compile)
+
+clean
+    deletes all spv and obj files
+    deletes the main executable
+
+clean_shaders
+    deletes all spv files
+
+clean_obj
+    deletes all obj files
+
+///

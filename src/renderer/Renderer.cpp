@@ -1,6 +1,9 @@
 #include "renderer/Renderer.hpp"
 
-#ifdef RENDERER_H
+#include <vector>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "factory/MeshFactory.hpp"
 
@@ -18,33 +21,40 @@ Engine::Engine(GLFWwindow* window)
 {
     m_logger = Logger::get_logger();
     m_window = window;
+}
 
+bool Engine::init()
+{
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
     
     m_instance = make_instance("VK Engine", m_instanceDeletionQueue);
     if(!m_instance)
     {
         clean_up();
-        return;
+        return false;
     }
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
 
+#ifdef DEBUG
+    
     m_debugMessenger = m_logger->make_debug_messenger(m_instance, m_instanceDeletionQueue);
     if(!m_debugMessenger && m_logger->is_enabled())
     {
         clean_up();
-        return;
+        return false;
     }
 
+#endif
+
     VkSurfaceKHR rawSurface;
-    VkResult result = glfwCreateWindowSurface(m_instance, window, nullptr, &rawSurface);
-    if (result != VK_SUCCESS)
+    VkResult rawSurfaceResult = glfwCreateWindowSurface(m_instance, m_window, nullptr, &rawSurface);
+    if(rawSurfaceResult != VK_SUCCESS)
     {
         m_logger->print("Failed to create window surface");
         
         clean_up();
-        return;
+        return false;
     }
 
     m_surface = vk::SurfaceKHR(rawSurface);
@@ -58,17 +68,17 @@ Engine::Engine(GLFWwindow* window)
     if(!m_physicalDevice)
     {
         clean_up();
-        return;
+        return false;
     }
     
     m_logicalDevice = create_logical_device(m_physicalDevice, m_surface, m_deviceDeletionQueue);
     if(!m_logicalDevice)
     {
         clean_up();
-        return;
+        return false;
     }
 
-    m_graphicsQueueFamilyIndex = findQueueFamilyIndex(
+    m_graphicsQueueFamilyIndex = find_queue_family_index(
         m_physicalDevice, m_surface, vk::QueueFlagBits::eGraphics 
     );
 
@@ -77,7 +87,7 @@ Engine::Engine(GLFWwindow* window)
         m_logger->print("No graphics queue found");
 
         clean_up();
-        return;
+        return false;
     }
 
     m_graphicsQueue = m_logicalDevice.getQueue(m_graphicsQueueFamilyIndex, 0);
@@ -86,23 +96,79 @@ Engine::Engine(GLFWwindow* window)
     if(!m_commandPool)
     {
         clean_up();
-        return;
+        return false;
     }
 
     m_allocator = make_vma_allocator(m_instance, m_physicalDevice, m_logicalDevice);
+    if(!m_allocator)
+    {
+        clean_up();
+        return false;
+    }
 
-    m_logger->set_mode(true);
-    m_mesh = build_triangle(m_allocator, m_logicalDevice, m_commandPool, m_graphicsQueue, m_vmaDeletionQueue);
-    m_logger->set_mode(false);
+    m_mesh = build_cube(m_allocator, m_logicalDevice, m_commandPool, m_graphicsQueue, m_vmaDeletionQueue);
+
+/////
+// future use
+/////
+
+    DescriptorSetLayoutBuilder descriptorSetLayoutBuilder(m_logicalDevice);
+    descriptorSetLayoutBuilder.add_entry(vk::ShaderStageFlagBits::eCompute, vk::DescriptorType::eStorageImage);
+
+    m_descriptorSetLayout = descriptorSetLayoutBuilder.build(m_deviceDeletionQueue);
+    if(!m_descriptorSetLayout)
+    {
+        clean_up();
+        return false;
+    }
+
+    PipelineLayoutBuilder pipelineLayoutBuilder(m_logicalDevice);
+    pipelineLayoutBuilder.add(m_descriptorSetLayout);
+    pipelineLayoutBuilder.add_push_constant_range(vk::ShaderStageFlagBits::eVertex, sizeof(glm::mat4));
+
+    m_pipelineLayout = pipelineLayoutBuilder.build(m_deviceDeletionQueue);
+    if(!m_pipelineLayout)
+    {
+        clean_up();
+        return false;
+    }
+
+////
+////
+
+    m_shader = make_compute_shader(
+        m_logicalDevice, "shaders/bin/clear_screen.comp.spv", &m_descriptorSetLayout, m_deviceDeletionQueue
+    );
+
+    if(!m_shader)
+    {
+        clean_up();
+        return false;
+    }
+
+    m_shaders = make_shader_object(
+        m_logicalDevice, "shaders/bin/shader.vert.spv", "shaders/bin/shader.frag.spv", m_deviceDeletionQueue
+    );
+
+    if(m_shaders.empty())
+    {
+        clean_up();
+        return false;
+    }
 
     m_frames.reserve(3);
-    init_render_resources();
+    if(!init_render_resources())
+    {
+        clean_up();
+        return false;
+    }
 
     m_currentTime = glfwGetTime();
     m_lastTime = m_currentTime;
     m_numFrames = 0;
 
     m_logger->print("Graphics engine started");
+    return true;
 }
 
 void Engine::draw()
@@ -110,13 +176,13 @@ void Engine::draw()
     if(rebuildSwapchain)
     {
         (void) m_logicalDevice.waitIdle();
+
         destroy_render_resources();
-        init_render_resources();
+        if(!init_render_resources())
+            return;
 
         m_currFrame = 0;
         rebuildSwapchain = false;
-
-        return;
     }
 
     Frame& frame = m_frames[m_currFrame];
@@ -144,7 +210,36 @@ void Engine::draw()
     m_imagesInFlight[imageIndex] = frame.renderFinishedFence;
     (void) m_logicalDevice.resetFences(frame.renderFinishedFence);
     
-    frame.record_command_buffer(imageIndex);
+    float aspect = 
+        static_cast<float>(m_swapchain.extent.width) /
+        static_cast<float>(m_swapchain.extent.height);
+
+    float t = glfwGetTime();
+
+    glm::mat4 model = glm::rotate(
+        glm::mat4(1.0f),
+        t,
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
+
+    glm::mat4 view = glm::lookAt(
+        glm::vec3(2.0f, 2.0f, 2.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
+
+    glm::mat4 proj = glm::perspective(
+        glm::radians(45.0f),
+        aspect,
+        0.1f,
+        10.0f
+    );
+
+    proj[1][1] *= -1.0f;
+
+    glm::mat4 mvp = proj * view * model;
+
+    frame.record_command_buffer(imageIndex, mvp);
     
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     vk::SubmitInfo submitInfo = {};
@@ -183,6 +278,8 @@ void Engine::draw()
 
 void Engine::update_timing()
 {
+    m_numFrames++;
+
     m_currentTime = glfwGetTime();
     double delta = m_currentTime - m_lastTime;
 
@@ -197,77 +294,63 @@ void Engine::update_timing()
 
         m_lastTime = m_currentTime;
         
-        m_numFrames = -1;
+        m_numFrames = 0;
         m_frameTime = 1000.0 / frameRate;
     }
-
-    m_numFrames++;
 }
 
-void Engine::init_render_resources()
+bool Engine::init_render_resources()
 {
-    m_logger->set_mode(false);
-
     int intWidth, intHeight;
     glfwGetWindowSize(m_window, &intWidth, &intHeight);
 
     uint32_t width = static_cast<uint32_t>(intWidth);
     uint32_t height = static_cast<uint32_t>(intHeight);
 
-    if((width == 0) || (height == 0)) return;
+    if((width == 0) || (height == 0)) 
+        return false;
+
+/////
+// future use
+/////
+
+    DescriptorPoolBuilder descriptorPoolBuilder(m_logicalDevice);
+    descriptorPoolBuilder.add_entry(vk::DescriptorType::eStorageImage);
+
+    m_descriptorPool = descriptorPoolBuilder.build(3, m_renderDeletionQueue);
+    if(!m_descriptorPool)
+    {
+        m_logger->print("Rendering crashed");
+        destroy_render_resources();
+        
+        return false;
+    }
+
+////
+////
 
     m_swapchain.build(m_logicalDevice, m_physicalDevice, m_surface, width, height, m_renderDeletionQueue);
     if(m_swapchain.imageViews.empty())
     {
         m_logger->print("Rendering crashed");
-        
-        clean_up();
-        return;
-    }
+        destroy_render_resources();
 
-    DescriptorSetLayoutBuilder descriptorSetLayoutBuilder(m_logicalDevice);
-    descriptorSetLayoutBuilder.add_entry(vk::ShaderStageFlagBits::eCompute, vk::DescriptorType::eStorageImage);
-
-    m_descriptorSetLayout = descriptorSetLayoutBuilder.build(m_renderDeletionQueue);
-    if(!m_descriptorSetLayout)
-    {
-        m_logger->print("Rendering crashed");
-        
-        clean_up();
-        return;
-    }
-
-    PipelineLayoutBuilder pipelineLayoutBuilder(m_logicalDevice);
-    pipelineLayoutBuilder.add(m_descriptorSetLayout);
-
-    m_pipelineLayout = pipelineLayoutBuilder.build(m_renderDeletionQueue);
-    if(!m_pipelineLayout)
-    {
-        m_logger->print("Rendering crashed");
-        
-        clean_up();
-        return;
-    }
-
-    m_shaders = make_shader_object(
-        m_logicalDevice, "shaders/bin/shader.vert.spv", "shaders/bin/shader.frag.spv", m_deviceDeletionQueue
-    );
-
-    if(m_shaders.empty())
-    {
-        clean_up();
-        return;
+        return false;
     }
 
     for(uint32_t i = 0; i < 3; i++)
     {
         vk::CommandBuffer commandBuffer = allocate_command_buffer(m_logicalDevice, m_commandPool);
-        m_frames.push_back(Frame(m_swapchain, m_logicalDevice, m_shaders, commandBuffer, &m_mesh, m_deviceDeletionQueue));
+
+        m_frames.push_back(Frame(
+            &m_swapchain, m_logicalDevice, &m_shaders, commandBuffer, &m_descriptorSetLayout, 
+            &m_descriptorPool, &m_pipelineLayout, &m_mesh, m_renderDeletionQueue
+        ));
     }
 
     m_imagesInFlight.resize(m_swapchain.imageViews.size(), VK_NULL_HANDLE);
 
-    m_logger->set_mode(true);
+    return true;
 }
 
 void Engine::destroy_render_resources()
@@ -288,7 +371,10 @@ void Engine::destroy_render_resources()
 
 void Engine::clean_up()
 {
-    (void) m_graphicsQueue.waitIdle();
+    m_logger->set_mode(true);
+
+    if(m_graphicsQueue)
+        (void) m_graphicsQueue.waitIdle();
     
     while(!m_vmaDeletionQueue.empty())
     {
@@ -298,8 +384,11 @@ void Engine::clean_up()
         m_vmaDeletionQueue.pop_back();
     }
 
-    vmaDestroyAllocator(m_allocator);
-    destroy_render_resources();
+    if(m_allocator)
+    {
+        vmaDestroyAllocator(m_allocator);
+        destroy_render_resources();
+    }
 
     while(!m_deviceDeletionQueue.empty())
     {
@@ -313,7 +402,7 @@ void Engine::clean_up()
     {
         if(m_instance)
             (m_instanceDeletionQueue.back())(m_instance);
-        
+
         m_instanceDeletionQueue.pop_back();
     }
 }
@@ -323,5 +412,3 @@ Engine::~Engine()
     clean_up();
     m_logger->print("Deleted graphics engine");
 }
-
-#endif

@@ -1,7 +1,5 @@
 #include "renderer/core/Synchronization.hpp"
 
-#ifdef SYNCHRONIZATION_H
-
 #include "logging/Logger.hpp"
 
 vk::Semaphore make_semaphore(
@@ -54,5 +52,3 @@ vk::Fence make_fence(
 
     return fence;
 }
-
-#endif

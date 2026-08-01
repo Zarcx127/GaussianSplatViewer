@@ -9,7 +9,7 @@
 #include <functional>
 
 #include <GLFW/glfw3.h>
-#include <vma/vk_mem_alloc.h>
+#include <vma/vk_mem_alloc.h>   
 
 #include <vulkan/vulkan.hpp>
 
@@ -24,6 +24,8 @@ public:
     bool rebuildSwapchain { false };
 
     Engine(GLFWwindow* window);
+    
+    bool init();
     
     void draw();
     void update_timing();
@@ -46,22 +48,26 @@ private:
     vk::PhysicalDevice m_physicalDevice;
     vk::Device m_logicalDevice;
 
-    VmaAllocator m_allocator;
+    VmaAllocator m_allocator { nullptr };
      
     uint32_t m_graphicsQueueFamilyIndex;
     vk::Queue m_graphicsQueue;
 
     vk::SurfaceKHR m_surface;
 
-    Swapchain m_swapchain;
-    std::vector<Frame> m_frames;
     std::vector<vk::ShaderEXT> m_shaders;
+    vk::ShaderEXT m_shader;
 
     Mesh m_mesh;
 
-    vk::CommandPool m_commandPool;
     vk::DescriptorSetLayout m_descriptorSetLayout;
+    vk::DescriptorPool m_descriptorPool;
     vk::PipelineLayout m_pipelineLayout;
+
+    vk::CommandPool m_commandPool;
+
+    Swapchain m_swapchain;
+    std::vector<Frame> m_frames;
 
     std::vector<vk::Fence> m_imagesInFlight;
 
@@ -73,7 +79,7 @@ private:
     uint32_t m_numFrames { 0 };
 
     void destroy_render_resources();
-    void init_render_resources();
+    bool init_render_resources();
 
     void clean_up();
 };

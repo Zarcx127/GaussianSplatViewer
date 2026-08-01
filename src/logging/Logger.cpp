@@ -1,25 +1,13 @@
 #include "logging/Logger.hpp"
 
-#ifdef LOGGER_H
-
 using std::vector;
-
-Logger* Logger::logger;
 
 Logger* Logger::get_logger()
 {
-    if(!logger)
-        logger = new Logger();
-
-    return logger;
+    static Logger logger;
+    return &logger;
 }
-
-void Logger::clean_up()
-{
-    delete logger;
-    logger = nullptr;
-}
-
+    
 void Logger::set_mode(bool mode)
 {
     m_enabled = mode;
@@ -83,7 +71,7 @@ vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
 
     if(createResult.result != vk::Result::eSuccess)
     {
-        logger->print("Failed to create debug messenger");
+        cout << "Failed to create debug messenger" << endl;
         return vk::DebugUtilsMessengerEXT();
     }
 
@@ -92,7 +80,7 @@ vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
         instance.destroyDebugUtilsMessengerEXT(messenger);
  
         if(m_enabled)
-            cout << "Deleted Debug Messenger" << endl;
+            cout << "Deleted debug messenger" << endl;
     });
 
     return messenger;
@@ -280,40 +268,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-#else
-
-void print(const char* msg) {}
-
-void report_version_number(uint32_t version) {}
-
-vk::DebugUtilsMessengerEXT make_debug_messenger(
-    vk::Instance& instance, std::deque<std::function<void(vk::Instance)>>& deletionQueue
-) {
-    return vk::DebugUtilsMessengerEXT();
-}
-
-void print_list(const char** list, uint32_t count, const char* prefix = "\t") {}
-
-void print_vector(const std::vector<const char*>& vec, const char* prefix = "\t") {}
-
-void log(const vk::PhysicalDevice& device) {}
-void log(const std::vector<vk::QueueFamilyProperties>& queueFamily, const char* prefix = "\t") {}
-void log(const vk::SurfaceCapabilitiesKHR& capabilities, const char* prefix = "\t") {}
-void log(const vk::Extent2D& extent, const char* prefix = "\t") {}
-void log(const std::vector<vk::SurfaceFormatKHR>& formats, const char* prefix = "\t") {}
-void log(const std::vector<vk::PresentModeKHR>& modes, const char* prefix = "\t") {}
-void log(const VmaAllocationInfo& info) {}
-
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagBitsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData
-) {
-    return VK_FALSE;
-}
-
-#endif
 
 vector<const char*> Logger::parse_transform_bits(vk::SurfaceTransformFlagsKHR bits)
 {
@@ -453,5 +407,33 @@ vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits)
     
     return results;
 }
+
+#else
+
+void Logger::print(const char* msg) {}
+
+void Logger::report_version_number(uint32_t version) {}
+
+vk::DebugUtilsMessengerEXT Logger::make_debug_messenger(
+    vk::Instance& instance, std::deque<std::function<void(vk::Instance)>>& deletionQueue
+) {
+    return vk::DebugUtilsMessengerEXT();
+}
+
+void Logger::print_list(const char** list, uint32_t count, const char* prefix) {}
+
+void Logger::print_vector(const std::vector<const char*>& vec, const char* prefix) {}
+
+void Logger::log(const vk::PhysicalDevice& device) {}
+void Logger::log(const std::vector<vk::QueueFamilyProperties>& queueFamily, const char* prefix) {}
+void Logger::log(const vk::SurfaceCapabilitiesKHR& capabilities, const char* prefix) {}
+void Logger::log(const vk::Extent2D& extent, const char* prefix) {}
+void Logger::log(const std::vector<vk::SurfaceFormatKHR>& formats, const char* prefix) {}
+void Logger::log(const std::vector<vk::PresentModeKHR>& modes, const char* prefix) {}
+void Logger::log(const VmaAllocationInfo& info, const char* prefix) {}
+
+vector<const char*> Logger::parse_transform_bits(vk::SurfaceTransformFlagsKHR bits) {}
+vector<const char*> Logger::parse_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits) {}
+vector<const char*> Logger::parse_image_usage_bits(vk::ImageUsageFlags bits) {}
 
 #endif

@@ -1,37 +1,50 @@
 #include "backend/GlfwBackend.hpp"
 
-#ifdef GLFW_BACKEND_H
-
 #include <sstream>
 
-#include "logging/Logger.hpp"
-
-GLFWwindow* build_window(int width, int height, const char* name)
+Window::Window(int width, int height, const char* name)
 {
-    Logger* logger = Logger::get_logger();
+    m_logger = Logger::get_logger();
+    
+    m_width = width;
+    m_height = height;
+    m_name = name;
+}
 
+bool Window::build_window()
+{
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    GLFWwindow* window = glfwCreateWindow(width, height, name, nullptr, nullptr);
-    if(window)
+    m_window = glfwCreateWindow(m_width, m_height, m_name, nullptr, nullptr);
+    if(!m_window)
     {
-        std::stringstream line;
-
-        line << "Successfully made a glfw window called \"" << name
-            << "\", width = " << width
-            << ", height = " << height;
-
-        logger->print(line.str().c_str());
-    }
-    else
-    {
-        logger->print("GLFW window creation failed");
+        m_logger->print("GLFW window creation failed");
+        return false;
     }
 
-    return window;
+    std::stringstream line;
+
+    line << "Successfully made a glfw window called \"" << m_name
+        << "\", width = " << m_width
+        << ", height = " << m_height;
+
+    m_logger->print(line.str().c_str());
+
+    return true;
 }
 
-#endif
+GLFWwindow* Window::get_window()
+{
+    return m_window; 
+}
+
+Window::~Window()
+{
+    if(m_window)
+        glfwDestroyWindow(m_window);
+    
+    glfwTerminate();
+}

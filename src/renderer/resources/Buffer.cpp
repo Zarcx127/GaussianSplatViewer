@@ -1,13 +1,11 @@
 #include "renderer/resources/Buffer.hpp"
 
-#ifdef BUFFER_H
-
-void copyBuffer(
+void copy_buffer(
     vk::Buffer srcBuffer,
     VmaAllocationInfo srcInfo,
     vk::Buffer dstBuffer,
     VmaAllocationInfo dstInfo,
-    uint32_t copySize,
+    vk::DeviceSize copySize,
     vk::Device device,
     vk::Queue queue,
     vk::CommandPool commandPool
@@ -25,10 +23,9 @@ void copyBuffer(
 
     (void) commandBuffer.begin(beginInfo);
 
-    vk::BufferCopy copyRegion;
-
-    copyRegion.srcOffset = srcInfo.offset;
-    copyRegion.dstOffset = dstInfo.offset;
+    vk::BufferCopy copyRegion = {};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
     copyRegion.size = copySize;
 
     commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
@@ -49,5 +46,3 @@ void copyBuffer(
     device.destroyFence(fence);
     device.freeCommandBuffers(commandPool, commandBuffer);
 }
-
-#endif

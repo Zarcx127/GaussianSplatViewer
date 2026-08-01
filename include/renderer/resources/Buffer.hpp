@@ -7,12 +7,12 @@
 
 #include <vma/vk_mem_alloc.h>
 
-void copyBuffer(
+void copy_buffer(
     vk::Buffer srcBuffer,
     VmaAllocationInfo srcInfo,
     vk::Buffer dstBuffer,
     VmaAllocationInfo dstInfo,
-    uint32_t copySize,
+    vk::DeviceSize copySize,
     vk::Device device,
     vk::Queue queue,
     vk::CommandPool commandPool

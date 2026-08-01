@@ -1,7 +1,5 @@
 #include "renderer/core/Command.hpp"
 
-#ifdef COMMAND_H
-
 #include "logging/Logger.hpp"
 
 vk::CommandPool make_command_pool(
@@ -43,5 +41,3 @@ vk::CommandBuffer allocate_command_buffer(vk::Device logicalDevice, vk::CommandP
 
     return logicalDevice.allocateCommandBuffers(allocInfo).value[0];
 }
-
-#endif

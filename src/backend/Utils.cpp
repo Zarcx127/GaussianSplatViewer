@@ -1,15 +1,13 @@
 #include "backend/Utils.hpp"
 
-#ifdef UTILS_H
-
 #include <fstream>
 #include <sstream>
 
 #include "logging/Logger.hpp"
 
-std::vector<char> utils::read_file(const char* filename)
+std::vector<uint32_t> utils::read_file(const char* filename)
 {
-    Logger* logger = Logger::get_logger();
+    Logger* logger = Logger::get_logger(); 
 
     std::ifstream file(filename, (std::ios::ate | std::ios::binary));
     if(!file.is_open())
@@ -21,10 +19,10 @@ std::vector<char> utils::read_file(const char* filename)
     }
     
     size_t filesize = static_cast<size_t>(file.tellg());
-    std::vector<char> buffer(filesize);
+    std::vector<uint32_t> buffer(filesize / sizeof(uint32_t));
 
     file.seekg(0);
-    file.read(buffer.data(), filesize);
+    file.read(reinterpret_cast<char*>(buffer.data()), filesize);
 
     file.close();
     
@@ -62,5 +60,3 @@ bool utils::vector_compare(const std::vector<const char*>& vec1, const std::vect
 
     return true;
 }
-
-#endif

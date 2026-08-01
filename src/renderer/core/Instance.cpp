@@ -1,7 +1,5 @@
 #include "renderer/core/Instance.hpp"
 
-#ifdef INSTANCE_H
-
 #include <vector>
 #include <sstream>
 #include <GLFW/glfw3.h>
@@ -66,7 +64,7 @@ vk::Instance make_instance(
     vk::ResultValue<vk::Instance> instanceAttempt = vk::createInstance(createInfo);
     if(instanceAttempt.result != vk::Result::eSuccess)
     {
-        logger->print("Failed to create Instance");
+        logger->print("Failed to create instance");
         return vk::Instance();
     }
 
@@ -74,7 +72,7 @@ vk::Instance make_instance(
 
     deletionQueue.push_back([logger] (vk::Instance instance)->void{
         instance.destroy();
-        logger->print("Deleted Instance");
+        logger->print("Deleted instance");
     });
 
     return instance;
@@ -132,7 +130,7 @@ namespace
     ) {
         Logger* logger = Logger::get_logger();
 
-        vector<vk::ExtensionProperties> supportedExtensions =  
+        vector<vk::ExtensionProperties> supportedExtensions = 
             vk::enumerateInstanceExtensionProperties().value;
         
         vector<const char*> supportedExtensionsNames(supportedExtensions.size());
@@ -155,5 +153,3 @@ namespace
         return true;
     }
 }
-
-#endif
