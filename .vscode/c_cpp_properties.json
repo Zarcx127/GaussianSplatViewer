@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Win-32",
+            "compilerPath": "g++",
+            "intelliSenseMode": "gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${env:VULKAN_SDK}/Include"
+            ],
+            "defines": [
+                "DEBUG",
+                "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
+                "VULKAN_HPP_NO_EXCEPTIONS",
+                "GLFW_INCLUDE_NONE"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
