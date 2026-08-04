@@ -109,7 +109,7 @@ No other prior installations are needed.
 1. Download and extract the folder.
 2. Open the folder in VS Code
 3. Open a terminal
-4. run:
+4. Run:
 
 ```powershell
 ./setup.bat
@@ -140,7 +140,7 @@ It would continue from where it left off,
 so you do not need to worry about it starting all over again.
 
 If it still fails, wait an hour before trying again. 
-Most likely, one of the mirror sites used to download the dependencies may be temporarily unavailable.
+Most likely, one of the mirror sites used to download the dependencies is temporarily unavailable.
 
 ## Acknowledgements
 
