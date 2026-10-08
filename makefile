@@ -83,7 +83,7 @@ ifeq ($(mode), debug)
 	FLAGS_OBJ += -DDEBUG
 
 	SHADER_OUTPUTS := $(SPVs)
-	SHADER_DEPS := $(SPV_DEPS)
+	SHADER_DEPS := $(SPV_DEPs)
 else ifeq ($(mode), release)
 	FLAGS_OBJ += -DRELEASE -DNDEBUG
 	FLAGS_EXE += -mwindows
